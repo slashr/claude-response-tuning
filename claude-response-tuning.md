@@ -35,6 +35,31 @@ The Bash tool does not perform the rewrite. It starts the Python executable and
 connects Claude's temporary Markdown draft to the wrapper's stdin. The wrapper
 performs the local validation; Luna performs the language transformation.
 
+### Mapping Codex's Pragmatic personalization
+
+Codex's `personality = "pragmatic"` setting is local to the Codex client. It
+is not automatically included in a separate Luna API request. The wrapper
+therefore states the equivalent editing contract explicitly:
+
+- lead with the concrete outcome, diagnosis, or action;
+- maximize useful information density and keep the prose direct;
+- distinguish verified evidence from inference and include practical tradeoffs
+  when they affect the decision;
+- use short paragraphs and purposeful lists for scanning;
+- remove ceremony, motivational language, clever framing, and non-actionable
+  explanation.
+
+This is a prompt-level mapping, not a second model call or a hidden API mode.
+The installed Codex value can be checked with:
+
+```bash
+rg -n '^personality' ~/.codex/config.toml
+```
+
+The Luna wrapper's explicit instructions remain the source of truth for this
+Claude-to-Luna path, so the behavior is reproducible for other users even when
+their Codex client has a different personalization setting.
+
 ## What this does and does not do
 
 It does:
@@ -167,7 +192,7 @@ The request payload should have this shape:
   "model": "gpt-5.6-luna",
   "reasoning": { "effort": "low" },
   "store": false,
-  "instructions": "Rewrite the draft into a concise, evidence-first Codex technical response. Preserve facts and protected technical literals, but rebuild prose, headings, ordering, and prioritization as needed. Lead with the outcome, use direct technical language, remove assistant self-reference, reader address, rhetorical framing, metaphors, and conversational calls to action. Output only the rewritten text.",
+  "instructions": "Rewrite the draft into a concise, evidence-first Codex technical response using the Pragmatic preference: lead with the concrete outcome, maximize useful information density, separate verified evidence from inference, state practical tradeoffs when relevant, and omit ceremony or clever framing. Preserve facts and protected technical literals, but rebuild prose, headings, ordering, and prioritization as needed. Use direct technical language, remove assistant self-reference, reader address, rhetorical framing, metaphors, and conversational calls to action. Output only the rewritten text.",
   "input": "<the complete draft>"
 }
 ```
