@@ -1,0 +1,422 @@
+#!/usr/bin/python3
+"""response-rewrite -- route a completed Claude draft through OpenAI Luna.
+
+Reads Claude's finished draft on stdin (or from a file argument) and writes the
+Luna-edited version to stdout.
+
+The contract is fail-safe: this script ALWAYS writes a usable answer to stdout
+and ALWAYS exits 0. Missing API key, timeout, HTTP error, empty output, an
+incomplete response, or a rewrite that dropped a protected literal all fall
+back to Claude's original draft, with the reason recorded on stderr.
+
+Usage:
+    response-rewrite < draft.md
+    response-rewrite draft.md
+    response-rewrite --check        # print resolved config, make no API call
+
+Environment:
+    CLAUDE_REWRITE_OPENAI_KEY   required; also read from ~/.claude/response-rewrite.env
+                                or an `export` line in ~/.zshrc
+    CLAUDE_REWRITE_MODEL        default gpt-5.6-luna
+    CLAUDE_REWRITE_EFFORT       default low  (the Luna-light setting)
+    CLAUDE_REWRITE_TIMEOUT      default 60   (seconds)
+    CLAUDE_REWRITE_API_URL      default https://api.openai.com/v1/responses
+    CLAUDE_REWRITE_MIN_RATIO    default 0.2  (truncation floor, rewrite/draft chars)
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import socket
+import sys
+import urllib.error
+import urllib.request
+
+KEY_VAR = "CLAUDE_REWRITE_OPENAI_KEY"
+DEFAULT_MODEL = "gpt-5.6-luna"
+DEFAULT_EFFORT = "low"
+DEFAULT_TIMEOUT = 60.0
+DEFAULT_API_URL = "https://api.openai.com/v1/responses"
+DEFAULT_MIN_RATIO = 0.2
+RATIO_FLOOR_MIN_DRAFT = 400
+MAX_LITERALS = 4000
+
+INSTRUCTIONS = """\
+You are a copy editor for a senior software engineer's terminal assistant.
+
+Rewrite the draft into a concise, evidence-first Codex technical response:
+tight sentences, plain direct language, active voice, no filler, no
+throat-clearing, and no restatement of the question.
+
+You are the final writer, not a light proofreader. Preserve the source facts,
+but rebuild the prose, headings, ordering, and prioritization when needed to
+remove the draft author's voice. The final answer must read like a concise,
+impersonal Codex technical report, not like an edited version of another
+assistant's response.
+
+Hard constraints. Violating any one of these makes your output unusable:
+- Never change a fact, number, measurement, name, path, command, flag,
+  identifier, or URL.
+- Reproduce every fenced code block and inline code span byte for byte.
+- Preserve every Markdown table: same rows, same columns, same cell values.
+- Do not add information, caveats, hedges, apologies, praise, or next-step
+  suggestions that are not already in the draft.
+- Do not drop material information or summarize detail away. You may rewrite
+  prose, replace headings, reorder sections and lists, or consolidate repeated
+  framing when every fact and recommendation remains present.
+- Preserve Markdown tables, code blocks, inline code, links, paths, and
+  identifiers. Do not preserve the draft's wording, heading labels, list
+  labels, or narrative sequence merely because they appear in the source.
+- Treat the draft as source material, not a voice to preserve. Use a neutral,
+  concise, evidence-first Codex tone. Remove assistant personality, drama,
+  second-person framing, and rhetorical flourishes. For example, rewrite
+  "you've been observability-blind for ~8 hours" as "Observability has been
+  impaired for ~8 hours." Preserve the duration and all other facts.
+- Prefer direct technical statements over subjective characterizations. Avoid
+  language such as "fundamentally healthy", "blinding", "telling the truth",
+  "dead", "cosmetic", "worth noting", and "say the word" unless the terms
+  are essential facts from the draft.
+- Do not use first-person narration (for example, "I couldn't get", "I
+  retried", or "I can look") or address the reader (for example, "your
+  homelab", "tell me", or "if you want"). State the observation, evidence,
+  and next action directly instead.
+- Remove metaphors and conversational incident language. For example, rewrite
+  "ProtonVPN is blackholing your homelab" as "ProtonVPN blocks homelab
+  traffic", "the hosts are fine" as the specific reachability evidence, and
+  "this should come back to life" as the concrete expected result.
+- Before responding, silently scan every prose sentence for first- or
+  second-person language, assistant narration, hedging, metaphors, rhetorical
+  setup, or a conversational call to action. Rewrite it. Do not alter protected
+  literals to satisfy this rule.
+- Lead with the outcome or recommendation. Follow with the minimum evidence
+  required to support it, then clearly ranked alternatives or next actions.
+  Use descriptive technical headings, not editorial labels or a conversational
+  narrative.
+- Write in the style of a strong Codex answer: answer first, explain only what
+  supports the answer, use short paragraphs or purposeful bullets, and stop
+  when the requested result is complete. Do not imitate the draft's rhythm,
+  transitions, enthusiasm, or rhetorical devices.
+- Silently apply these transformations throughout the whole response, not only
+  to isolated phrases: remove assistant self-reference, reader address,
+  narrative throat-clearing, sales-like prioritization, dramatic incident
+  language, and conversational calls to action.
+
+Output only the rewritten text: no preamble, no commentary, and no surrounding
+code fence."""
+
+
+def note(reason: str) -> None:
+    sys.stderr.write("response-rewrite: %s\n" % reason)
+
+
+def emit(text: str) -> None:
+    sys.stdout.write(text)
+    if text and not text.endswith("\n"):
+        sys.stdout.write("\n")
+
+
+def fall_back(draft: str, reason: str) -> None:
+    """Print Claude's original draft and explain why. Never raises."""
+    note("falling back to draft (%s)" % reason)
+    emit(draft)
+    sys.exit(0)
+
+
+# --------------------------------------------------------------------------
+# Key resolution. The key value is never logged, echoed, or written anywhere.
+# --------------------------------------------------------------------------
+
+def resolve_key() -> str:
+    key = (os.environ.get(KEY_VAR) or "").strip()
+    if key:
+        return key
+
+    env_file = os.path.expanduser("~/.claude/response-rewrite.env")
+    key = _key_from_file(env_file, r"^\s*(?:export\s+)?%s\s*=\s*(.+?)\s*$")
+    if key:
+        return key
+
+    # Claude Code tool shells do not always inherit an interactive profile, so
+    # fall back to the canonical `export` line in the user's own shell config.
+    return _key_from_file(
+        os.path.expanduser("~/.zshrc"),
+        r"^\s*export\s+%s\s*=\s*(.+?)\s*$",
+    )
+
+
+def _key_from_file(path: str, pattern_template: str) -> str:
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            contents = handle.read()
+    except OSError:
+        return ""
+    match = re.search(
+        pattern_template % re.escape(KEY_VAR), contents, re.MULTILINE
+    )
+    if not match:
+        return ""
+    value = match.group(1).strip()
+    if value[:1] in ("'", '"') and value[-1:] == value[:1] and len(value) > 1:
+        value = value[1:-1]
+    return value.strip()
+
+
+# --------------------------------------------------------------------------
+# Protected literals: anything Luna must carry through untouched.
+# --------------------------------------------------------------------------
+
+FENCE_RE = re.compile(r"(?ms)^[ \t]*(`{3,}|~{3,})[^\n]*\n(.*?)^[ \t]*\1")
+INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
+TABLE_ROW_RE = re.compile(r"^\s*\|.*\|\s*$")
+URL_RE = re.compile(r"https?://[^\s)\]}>\"'`]+")
+PATH_RE = re.compile(r"(?<![\w])(?:~/|/)[\w.\-/@+]{2,}")
+NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)*")
+SEPARATOR_CELL_RE = re.compile(r"^:?-{2,}:?$")
+
+
+def protected_literals(draft: str):
+    """Return [(kind, literal)] that must survive the rewrite, deduped."""
+    seen = set()
+    out = []
+
+    def add(kind: str, literal: str) -> None:
+        literal = literal.strip()
+        if len(literal) < 2 or literal in seen:
+            return
+        seen.add(literal)
+        out.append((kind, literal))
+
+    # Code blocks: require each non-blank line, so pure re-indentation or a
+    # changed trailing newline does not trip the check but edited code does.
+    fenced_spans = []
+    for match in FENCE_RE.finditer(draft):
+        fenced_spans.append(match.span())
+        for line in match.group(2).splitlines():
+            add("code block line", line)
+
+    def inside_fence(pos: int) -> bool:
+        return any(start <= pos < end for start, end in fenced_spans)
+
+    for match in INLINE_CODE_RE.finditer(draft):
+        if not inside_fence(match.start()):
+            add("inline code", match.group(1))
+
+    table_rows = 0
+    for line in draft.splitlines():
+        if not TABLE_ROW_RE.match(line):
+            continue
+        table_rows += 1
+        for cell in line.strip().strip("|").split("|"):
+            cell = cell.strip()
+            if cell and not SEPARATOR_CELL_RE.match(cell):
+                add("table cell", cell)
+
+    for match in URL_RE.finditer(draft):
+        add("url", match.group(0).rstrip(".,;:"))
+    for match in PATH_RE.finditer(draft):
+        add("path", match.group(0).rstrip(".,;:"))
+    for match in NUMBER_RE.finditer(draft):
+        add("number", match.group(0))
+
+    return out[:MAX_LITERALS], table_rows
+
+
+def verify(draft: str, rewrite: str):
+    """Return None if the rewrite kept everything protected, else a reason."""
+    literals, draft_rows = protected_literals(draft)
+
+    missing = [(kind, lit) for kind, lit in literals if lit not in rewrite]
+    if missing:
+        shown = ", ".join(
+            "%s %r" % (kind, lit[:60]) for kind, lit in missing[:3]
+        )
+        more = "" if len(missing) <= 3 else " (+%d more)" % (len(missing) - 3)
+        return "dropped %d protected literal(s): %s%s" % (
+            len(missing),
+            shown,
+            more,
+        )
+
+    rewrite_rows = sum(
+        1 for line in rewrite.splitlines() if TABLE_ROW_RE.match(line)
+    )
+    if rewrite_rows < draft_rows:
+        return "table shrank: %d rows in draft, %d in rewrite" % (
+            draft_rows,
+            rewrite_rows,
+        )
+
+    # The length floor catches a truncated API response, but only on drafts long
+    # enough for a big cut to be suspicious. On a short draft, honest tightening
+    # is proportionally huge (a padded 213-char draft legitimately edits down to
+    # 52), so there the protected literals above are the real guard.
+    draft_len = len(draft.strip())
+    min_ratio = _float_env("CLAUDE_REWRITE_MIN_RATIO", DEFAULT_MIN_RATIO)
+    if draft_len >= RATIO_FLOOR_MIN_DRAFT:
+        if len(rewrite.strip()) < draft_len * min_ratio:
+            return "rewrite looks truncated: %d chars vs %d in draft" % (
+                len(rewrite.strip()),
+                draft_len,
+            )
+    return None
+
+
+def _float_env(name: str, default: float) -> float:
+    try:
+        return float(os.environ[name])
+    except (KeyError, ValueError):
+        return default
+
+
+# --------------------------------------------------------------------------
+# Luna call
+# --------------------------------------------------------------------------
+
+def call_luna(draft: str, key: str, instructions: str = INSTRUCTIONS):
+    """Return (text, None) on success or (None, reason) on failure."""
+    payload = {
+        "model": os.environ.get("CLAUDE_REWRITE_MODEL") or DEFAULT_MODEL,
+        "reasoning": {
+            "effort": os.environ.get("CLAUDE_REWRITE_EFFORT") or DEFAULT_EFFORT
+        },
+        "store": False,
+        "instructions": instructions,
+        "input": draft,
+    }
+    request = urllib.request.Request(
+        os.environ.get("CLAUDE_REWRITE_API_URL") or DEFAULT_API_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": "Bearer %s" % key,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    timeout = _float_env("CLAUDE_REWRITE_TIMEOUT", DEFAULT_TIMEOUT)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        return None, "HTTP %s: %s" % (exc.code, _http_detail(exc))
+    except urllib.error.URLError as exc:
+        if isinstance(exc.reason, (socket.timeout, TimeoutError)):
+            return None, "timed out after %gs" % timeout
+        return None, "network error: %s" % (exc.reason,)
+    except (socket.timeout, TimeoutError):
+        return None, "timed out after %gs" % timeout
+    except (OSError, ValueError) as exc:
+        return None, "request failed: %s" % (exc,)
+
+    status = body.get("status")
+    if status and status != "completed":
+        detail = (body.get("incomplete_details") or {}).get("reason") or status
+        return None, "response not completed (%s)" % detail
+
+    text = extract_text(body)
+    if not text.strip():
+        return None, "empty model output"
+    return text, None
+
+
+def _http_detail(exc: urllib.error.HTTPError) -> str:
+    try:
+        body = json.loads(exc.read().decode("utf-8"))
+        message = (body.get("error") or {}).get("message")
+        if message:
+            return str(message)[:300]
+    except Exception:
+        pass
+    return exc.reason or "no detail"
+
+
+def extract_text(body) -> str:
+    """Collect output_text parts from a Responses API payload."""
+    if isinstance(body.get("output_text"), str):
+        return body["output_text"]
+    parts = []
+    for item in body.get("output") or []:
+        if not isinstance(item, dict) or item.get("type") == "reasoning":
+            continue
+        for part in item.get("content") or []:
+            if isinstance(part, dict) and part.get("type") == "output_text":
+                parts.append(part.get("text") or "")
+    return "".join(parts)
+
+
+WRAPPER_INFO = ("", "markdown", "md", "text", "txt", "plaintext")
+
+
+def unwrap_fence(draft: str, rewrite: str) -> str:
+    """Undo a model wrapping the whole answer in one code fence."""
+    if draft.lstrip().startswith(("```", "~~~")):
+        return rewrite  # the draft really is a code block
+    match = re.match(
+        r"(?s)^(`{3,}|~{3,})([^\n]*)\n(.*?)\n?\1\s*$", rewrite.strip()
+    )
+    if not match:
+        return rewrite
+    info = match.group(2).strip().lower()
+    inner = match.group(3)
+    if info in WRAPPER_INFO:
+        return inner
+    # A real language tag on an answer with no inner fence is plausibly a
+    # genuine all-code answer, so leave it alone.
+    return rewrite if FENCE_RE.search(inner) else inner
+
+
+# --------------------------------------------------------------------------
+
+def main() -> None:
+    args = [a for a in sys.argv[1:] if a]
+
+    if "--check" in args:
+        key = resolve_key()
+        print("model:    %s" % (os.environ.get("CLAUDE_REWRITE_MODEL") or DEFAULT_MODEL))
+        print("effort:   %s" % (os.environ.get("CLAUDE_REWRITE_EFFORT") or DEFAULT_EFFORT))
+        print("endpoint: %s" % (os.environ.get("CLAUDE_REWRITE_API_URL") or DEFAULT_API_URL))
+        print("timeout:  %gs" % _float_env("CLAUDE_REWRITE_TIMEOUT", DEFAULT_TIMEOUT))
+        print("api key:  %s" % ("resolved" if key else "MISSING"))
+        sys.exit(0)
+
+    if args and not args[0].startswith("-"):
+        try:
+            with open(args[0], "r", encoding="utf-8") as handle:
+                draft = handle.read()
+        except OSError as exc:
+            note("cannot read draft file: %s" % exc)
+            sys.exit(0)
+    else:
+        draft = sys.stdin.read()
+
+    if not draft.strip():
+        note("empty draft, nothing to rewrite")
+        emit(draft)
+        sys.exit(0)
+
+    key = resolve_key()
+    if not key:
+        fall_back(draft, "%s not set" % KEY_VAR)
+
+    rewrite, reason = call_luna(draft, key)
+    if reason:
+        fall_back(draft, reason)
+
+    rewrite = unwrap_fence(draft, rewrite)
+    reason = verify(draft, rewrite)
+    if reason:
+        fall_back(draft, reason)
+
+    note("rewrote %d chars -> %d chars" % (len(draft), len(rewrite)))
+    emit(rewrite)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except SystemExit:
+        raise
+    except BaseException as exc:  # never break the response
+        note("unexpected error: %r" % (exc,))
+        sys.exit(0)
