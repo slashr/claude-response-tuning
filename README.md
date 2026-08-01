@@ -13,3 +13,46 @@ wrapper sends the completed draft to OpenAI Luna for a Codex-style rewrite.
 
 The repository contains no API keys. Each user must configure their own key and
 Claude settings. Read the guide before installing.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[Claude tools and reasoning] --> B[Completed draft]
+    B --> C[Claude Bash tool]
+    C --> D[Python response-rewrite wrapper]
+    D --> E[One Luna Responses API request]
+    E --> F[Codex-style rewritten response]
+    F --> G[Deterministic integrity checks]
+    G -->|valid| H[stdout]
+    G -->|invalid| I[Original draft fallback]
+    H --> J[Claude publishes stdout only]
+    I --> J
+```
+
+The Bash tool is only the launcher and transport layer. The wrapper reads the
+draft, builds the JSON request, calls Luna once, validates protected literals,
+and returns either the rewrite or the original draft.
+
+## Request boundary
+
+```mermaid
+sequenceDiagram
+    participant Claude as Claude model
+    participant Bash as Bash tool
+    participant Wrapper as Python wrapper
+    participant Luna as Luna API
+
+    Claude->>Bash: Write temporary draft and invoke wrapper
+    Bash->>Wrapper: Pass draft through stdin
+    Wrapper->>Wrapper: Resolve key and protect literals
+    Wrapper->>Luna: POST draft plus editing instructions
+    Luna-->>Wrapper: One rewritten response
+    Wrapper->>Wrapper: Validate code, URLs, paths, numbers, tables
+    Wrapper-->>Bash: Rewritten stdout or original-draft fallback
+    Bash-->>Claude: Tool result
+    Claude->>Claude: Publish stdout byte-for-byte
+```
+
+See [claude-response-tuning.md](claude-response-tuning.md) for installation and
+verification details.
