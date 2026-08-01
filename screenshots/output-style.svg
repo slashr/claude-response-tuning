@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+  <rect width="1200" height="760" rx="16" fill="#111827"/>
+  <rect width="1200" height="56" rx="16" fill="#1f2937"/>
+  <circle cx="28" cy="28" r="7" fill="#ef4444"/><circle cx="52" cy="28" r="7" fill="#f59e0b"/><circle cx="76" cy="28" r="7" fill="#22c55e"/>
+  <text x="108" y="35" fill="#d1d5db" font-family="SFMono-Regular,Menlo,monospace" font-size="18">~/.claude/output-styles/response-rewrite.md</text>
+  <text x="36" y="100" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">1</text>
+  <text x="70" y="100" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">---</text>
+  <text x="36" y="132" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">2</text>
+  <text x="70" y="132" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">name: Response rewrite</text>
+  <text x="36" y="164" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">3</text>
+  <text x="70" y="164" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">keep-coding-instructions: true</text>
+  <text x="36" y="196" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">4</text>
+  <text x="70" y="196" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">---</text>
+  <text x="36" y="250" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">5</text>
+  <text x="70" y="250" fill="#a7f3d0" font-family="SFMono-Regular,Menlo,monospace" font-size="20"># Response rewrite</text>
+  <text x="36" y="304" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">6</text>
+  <text x="70" y="304" fill="#f9fafb" font-family="SFMono-Regular,Menlo,monospace" font-size="20">The final response is produced by the local</text>
+  <text x="70" y="336" fill="#f9fafb" font-family="SFMono-Regular,Menlo,monospace" font-size="20">response-rewrite command.</text>
+  <text x="36" y="390" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">7</text>
+  <text x="70" y="390" fill="#f9fafb" font-family="SFMono-Regular,Menlo,monospace" font-size="20">Draft internally, invoke the command once, and</text>
+  <text x="70" y="422" fill="#f9fafb" font-family="SFMono-Regular,Menlo,monospace" font-size="20">publish stdout byte-for-byte as the final answer.</text>
+  <text x="36" y="476" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">8</text>
+  <text x="70" y="476" fill="#f9fafb" font-family="SFMono-Regular,Menlo,monospace" font-size="20">Do not add text before or after the command output.</text>
+  <rect x="36" y="548" width="1128" height="150" rx="10" fill="#172554" stroke="#3b82f6"/>
+  <text x="60" y="590" fill="#bfdbfe" font-family="SFMono-Regular,Menlo,monospace" font-size="19">Purpose</text>
+  <text x="60" y="626" fill="#dbeafe" font-family="SFMono-Regular,Menlo,monospace" font-size="18">This is the Claude-side contract. It prevents Claude from</text>
+  <text x="60" y="656" fill="#dbeafe" font-family="SFMono-Regular,Menlo,monospace" font-size="18">appending its own prose after Luna's stdout.</text>
+</svg>

@@ -12,6 +12,29 @@ The important design rule is simple: Claude must publish the wrapper's stdout
 exactly. A wrapper alone is not enough if Claude is allowed to add progress text
 before it or commentary after it.
 
+## Architecture
+
+```mermaid
+flowchart TD
+    A[Claude completes tool-backed investigation] --> B[Claude drafts final response]
+    B --> C[Claude Bash tool launches response-rewrite]
+    C --> D[Python wrapper reads stdin or draft file]
+    D --> E[Resolve key and collect protected literals]
+    E --> F[Build JSON request]
+    F --> G[One POST to gpt-5.6-luna]
+    G --> H[Extract rewritten text]
+    H --> I[Unwrap accidental outer fence]
+    I --> J{Integrity checks pass?}
+    J -->|Yes| K[Emit rewritten text on stdout]
+    J -->|No or API failure| L[Emit original draft on stdout]
+    K --> M[Claude publishes stdout exactly]
+    L --> M
+```
+
+The Bash tool does not perform the rewrite. It starts the Python executable and
+connects Claude's temporary Markdown draft to the wrapper's stdin. The wrapper
+performs the local validation; Luna performs the language transformation.
+
 ## What this does and does not do
 
 It does:
@@ -114,6 +137,10 @@ This is the most important file. A weaker instruction such as “keep chatter to
 a minimum” lets Claude emit its own prose outside the rewrite step, which makes
 the result look inconsistent even when Luna succeeded.
 
+Reference panel (sanitized):
+
+![The Response rewrite output style](screenshots/output-style.svg)
+
 ## 3. Install a fail-safe Luna wrapper
 
 Create `~/.claude/bin/response-rewrite`, make it executable, and use a Python 3
@@ -162,6 +189,32 @@ If any protected item is missing, emit the original draft. This is intentionally
 conservative: tone editing must not silently alter commands, identifiers, or
 operational facts.
 
+### One-call request lifecycle
+
+```mermaid
+sequenceDiagram
+    participant C as Claude model
+    participant S as Bash tool
+    participant W as Python wrapper
+    participant L as Luna API
+    participant D as Claude Desktop
+
+    C->>S: Create draft.md and invoke response-rewrite
+    S->>W: Pass draft text through stdin
+    W->>W: Resolve key and collect literals
+    W->>L: Send one Responses API request
+    L-->>W: Return rewritten text
+    W->>W: Validate protected content
+    alt Validation succeeds
+        W-->>S: Luna text on stdout
+    else API or validation failure
+        W-->>S: Original draft on stdout
+    end
+    W-->>S: Diagnostic only on stderr
+    S-->>C: Tool result
+    C->>D: Publish stdout byte-for-byte
+```
+
 ## 4. Configure Claude Desktop
 
 Merge these fields into `~/.claude/settings.json`:
@@ -187,6 +240,14 @@ Replace `YOUR_MACOS_USER` with the macOS account that actually runs Claude.
 `api.openai.com` must be allowed; otherwise the wrapper will fall back to the
 Claude draft. Start a **new Claude Code Desktop task** after changing settings
 or an output style.
+
+Reference panel (sanitized):
+
+![The relevant Claude settings](screenshots/settings-json.svg)
+
+The per-user locations are summarized here:
+
+![The per-user Claude file layout](screenshots/file-layout.svg)
 
 ## 5. Verify the wrapper directly
 

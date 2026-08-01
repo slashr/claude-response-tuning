@@ -1,0 +1,13 @@
+{
+  "outputStyle": "Response rewrite",
+  "permissions": {
+    "allow": [
+      "Bash(~/.claude/bin/response-rewrite:*)"
+    ]
+  },
+  "sandbox": {
+    "network": {
+      "allowedDomains": ["api.openai.com"]
+    }
+  }
+}
