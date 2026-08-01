@@ -36,8 +36,9 @@ and returns either the rewrite or the original draft.
 
 The wrapper explicitly maps Codex's Pragmatic personalization into its Luna
 instructions: outcome-first writing, high information density, evidence before
-inference, practical tradeoffs, and no ceremony or rhetorical framing. The
-Codex client setting itself is not inherited by a separate API request.
+inference, practical tradeoffs, and no ceremony or rhetorical framing. It also
+sets Responses API `text.verbosity` to `low` by default. The Codex client
+settings themselves are not inherited by a separate API request.
 
 ## Request boundary
 

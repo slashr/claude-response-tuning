@@ -24,7 +24,7 @@ Environment:
                                 or an `export` line in ~/.zshrc
     CLAUDE_REWRITE_MODEL        default gpt-5.6-luna
     CLAUDE_REWRITE_EFFORT       default low  (the Luna-light setting)
-    CLAUDE_REWRITE_VERBOSITY    default low  (low | medium | high)
+    CLAUDE_REWRITE_VERBOSITY    default low  (Responses API text verbosity)
     CLAUDE_REWRITE_TIMEOUT      default 60   (seconds)
     CLAUDE_REWRITE_API_URL      default https://api.openai.com/v1/responses
     CLAUDE_REWRITE_MIN_RATIO    default 0.2  (truncation floor, rewrite/draft chars)
@@ -313,8 +313,9 @@ def call_luna(draft: str, key: str, instructions: str = INSTRUCTIONS):
         "store": False,
         # Must stay nested; a top-level "verbosity" key is rejected outright.
         "text": {
-            "verbosity": os.environ.get("CLAUDE_REWRITE_VERBOSITY")
-            or DEFAULT_VERBOSITY
+            "verbosity": (
+                os.environ.get("CLAUDE_REWRITE_VERBOSITY") or DEFAULT_VERBOSITY
+            )
         },
         "instructions": instructions,
         "input": draft,
