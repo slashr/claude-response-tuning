@@ -19,6 +19,7 @@ Environment:
                                 or an `export` line in ~/.zshrc
     CLAUDE_REWRITE_MODEL        default gpt-5.6-luna
     CLAUDE_REWRITE_EFFORT       default low  (the Luna-light setting)
+    CLAUDE_REWRITE_VERBOSITY    default low  (Responses API text verbosity)
     CLAUDE_REWRITE_TIMEOUT      default 60   (seconds)
     CLAUDE_REWRITE_API_URL      default https://api.openai.com/v1/responses
     CLAUDE_REWRITE_MIN_RATIO    default 0.2  (truncation floor, rewrite/draft chars)
@@ -37,6 +38,7 @@ import urllib.request
 KEY_VAR = "CLAUDE_REWRITE_OPENAI_KEY"
 DEFAULT_MODEL = "gpt-5.6-luna"
 DEFAULT_EFFORT = "low"
+DEFAULT_VERBOSITY = "low"
 DEFAULT_TIMEOUT = 60.0
 DEFAULT_API_URL = "https://api.openai.com/v1/responses"
 DEFAULT_MIN_RATIO = 0.2
@@ -290,6 +292,11 @@ def call_luna(draft: str, key: str, instructions: str = INSTRUCTIONS):
         "reasoning": {
             "effort": os.environ.get("CLAUDE_REWRITE_EFFORT") or DEFAULT_EFFORT
         },
+        "text": {
+            "verbosity": (
+                os.environ.get("CLAUDE_REWRITE_VERBOSITY") or DEFAULT_VERBOSITY
+            )
+        },
         "store": False,
         "instructions": instructions,
         "input": draft,
@@ -384,6 +391,7 @@ def main() -> None:
         key = resolve_key()
         print("model:    %s" % (os.environ.get("CLAUDE_REWRITE_MODEL") or DEFAULT_MODEL))
         print("effort:   %s" % (os.environ.get("CLAUDE_REWRITE_EFFORT") or DEFAULT_EFFORT))
+        print("verbosity:%s" % (os.environ.get("CLAUDE_REWRITE_VERBOSITY") or DEFAULT_VERBOSITY))
         print("endpoint: %s" % (os.environ.get("CLAUDE_REWRITE_API_URL") or DEFAULT_API_URL))
         print("timeout:  %gs" % _float_env("CLAUDE_REWRITE_TIMEOUT", DEFAULT_TIMEOUT))
         print("api key:  %s" % ("resolved" if key else "MISSING"))

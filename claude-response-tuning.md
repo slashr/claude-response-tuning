@@ -177,7 +177,8 @@ processing.
 2. Resolve `CLAUDE_REWRITE_OPENAI_KEY` from the process environment or a
    literal assignment in the current user's `~/.zshrc`.
 3. POST one request to `https://api.openai.com/v1/responses`.
-4. Use `model: gpt-5.6-luna`, `reasoning.effort: low`, and `store: false`.
+4. Use `model: gpt-5.6-luna`, `reasoning.effort: low`, `text.verbosity: low`,
+   and `store: false`.
 5. Write only Luna's edited text to stdout.
 6. Make one Luna request per response; do not perform a second style-repair
    request.
@@ -191,6 +192,7 @@ The request payload should have this shape:
 {
   "model": "gpt-5.6-luna",
   "reasoning": { "effort": "low" },
+  "text": { "verbosity": "low" },
   "store": false,
   "instructions": "Rewrite the draft into a concise, evidence-first Codex technical response using the Pragmatic preference: lead with the concrete outcome, maximize useful information density, separate verified evidence from inference, state practical tradeoffs when relevant, and omit ceremony or clever framing. Preserve facts and protected technical literals, but rebuild prose, headings, ordering, and prioritization as needed. Use direct technical language, remove assistant self-reference, reader address, rhetorical framing, metaphors, and conversational calls to action. Output only the rewritten text.",
   "input": "<the complete draft>"
