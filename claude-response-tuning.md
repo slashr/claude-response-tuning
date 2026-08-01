@@ -137,6 +137,10 @@ This is the most important file. A weaker instruction such as “keep chatter to
 a minimum” lets Claude emit its own prose outside the rewrite step, which makes
 the result look inconsistent even when Luna succeeded.
 
+Reference panel (sanitized):
+
+![The Response rewrite output style](screenshots/output-style.svg)
+
 ## 3. Install a fail-safe Luna wrapper
 
 Create `~/.claude/bin/response-rewrite`, make it executable, and use a Python 3
@@ -236,6 +240,14 @@ Replace `YOUR_MACOS_USER` with the macOS account that actually runs Claude.
 `api.openai.com` must be allowed; otherwise the wrapper will fall back to the
 Claude draft. Start a **new Claude Code Desktop task** after changing settings
 or an output style.
+
+Reference panel (sanitized):
+
+![The relevant Claude settings](screenshots/settings-json.svg)
+
+The per-user locations are summarized here:
+
+![The per-user Claude file layout](screenshots/file-layout.svg)
 
 ## 5. Verify the wrapper directly
 

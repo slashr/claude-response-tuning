@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700">
+  <rect width="1200" height="700" rx="16" fill="#111827"/>
+  <rect width="1200" height="56" rx="16" fill="#1f2937"/>
+  <circle cx="28" cy="28" r="7" fill="#ef4444"/><circle cx="52" cy="28" r="7" fill="#f59e0b"/><circle cx="76" cy="28" r="7" fill="#22c55e"/>
+  <text x="108" y="35" fill="#d1d5db" font-family="SFMono-Regular,Menlo,monospace" font-size="18">~/.claude/settings.json — sanitized example</text>
+  <text x="36" y="104" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">1</text><text x="70" y="104" fill="#f9fafb" font-family="SFMono-Regular,Menlo,monospace" font-size="20">{</text>
+  <text x="36" y="140" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">2</text><text x="70" y="140" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">  "outputStyle": "Response rewrite",</text>
+  <text x="36" y="176" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">3</text><text x="70" y="176" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">  "permissions": {</text>
+  <text x="36" y="212" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">4</text><text x="70" y="212" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">    "allow": [</text>
+  <text x="36" y="248" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">5</text><text x="70" y="248" fill="#a7f3d0" font-family="SFMono-Regular,Menlo,monospace" font-size="20">      "Bash(~/.claude/bin/response-rewrite:*)"</text>
+  <text x="36" y="284" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">6</text><text x="70" y="284" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">    ]</text>
+  <text x="36" y="320" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">7</text><text x="70" y="320" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">  },</text>
+  <text x="36" y="356" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">8</text><text x="70" y="356" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">  "sandbox": {</text>
+  <text x="36" y="392" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">9</text><text x="70" y="392" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">    "network": {</text>
+  <text x="36" y="428" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">10</text><text x="70" y="428" fill="#a7f3d0" font-family="SFMono-Regular,Menlo,monospace" font-size="20">      "allowedDomains": ["api.openai.com"]</text>
+  <text x="36" y="464" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">11</text><text x="70" y="464" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">    }</text>
+  <text x="36" y="500" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">12</text><text x="70" y="500" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">  }</text>
+  <text x="36" y="536" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">13</text><text x="70" y="536" fill="#f9fafb" font-family="SFMono-Regular,Menlo,monospace" font-size="20">}</text>
+  <rect x="36" y="575" width="1128" height="80" rx="10" fill="#172554" stroke="#3b82f6"/>
+  <text x="60" y="610" fill="#dbeafe" font-family="SFMono-Regular,Menlo,monospace" font-size="18">Only the wrapper command and api.openai.com need access.</text>
+  <text x="60" y="638" fill="#dbeafe" font-family="SFMono-Regular,Menlo,monospace" font-size="18">The API key is configured separately and is not shown here.</text>
+</svg>

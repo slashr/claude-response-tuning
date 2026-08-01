@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620">
+  <rect width="1200" height="620" rx="16" fill="#0f172a"/>
+  <text x="54" y="70" fill="#f8fafc" font-family="SFMono-Regular,Menlo,monospace" font-size="27">Per-user Claude configuration</text>
+  <text x="54" y="110" fill="#94a3b8" font-family="SFMono-Regular,Menlo,monospace" font-size="18">Every colleague installs the same files under their own home directory.</text>
+  <rect x="54" y="150" width="1092" height="390" rx="14" fill="#111827" stroke="#334155" stroke-width="2"/>
+  <text x="90" y="200" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="22">~/.claude/</text>
+  <text x="126" y="246" fill="#a7f3d0" font-family="SFMono-Regular,Menlo,monospace" font-size="21">bin/response-rewrite</text>
+  <text x="570" y="246" fill="#cbd5e1" font-family="SFMono-Regular,Menlo,monospace" font-size="18">Python wrapper</text>
+  <text x="126" y="292" fill="#a7f3d0" font-family="SFMono-Regular,Menlo,monospace" font-size="21">output-styles/response-rewrite.md</text>
+  <text x="570" y="292" fill="#cbd5e1" font-family="SFMono-Regular,Menlo,monospace" font-size="18">Claude final-output contract</text>
+  <text x="126" y="338" fill="#a7f3d0" font-family="SFMono-Regular,Menlo,monospace" font-size="21">settings.json</text>
+  <text x="570" y="338" fill="#cbd5e1" font-family="SFMono-Regular,Menlo,monospace" font-size="18">output style, Bash permission, network allowlist</text>
+  <text x="126" y="384" fill="#fbbf24" font-family="SFMono-Regular,Menlo,monospace" font-size="21">response-rewrite.env</text>
+  <text x="570" y="384" fill="#fde68a" font-family="SFMono-Regular,Menlo,monospace" font-size="18">private API key; never commit</text>
+  <path d="M126 430 H1060" stroke="#475569" stroke-width="2" stroke-dasharray="8 8"/>
+  <text x="126" y="475" fill="#94a3b8" font-family="SFMono-Regular,Menlo,monospace" font-size="18">No shared key. No shared conversation data. No repository secrets.</text>
+</svg>

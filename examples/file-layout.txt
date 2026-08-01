@@ -1,0 +1,7 @@
+~/.claude/
+├── bin/
+│   └── response-rewrite                 # Python 3 wrapper
+├── output-styles/
+│   └── response-rewrite.md              # Claude final-output protocol
+├── response-rewrite.env                 # private API key; never commit
+└── settings.json                        # output style, Bash, network

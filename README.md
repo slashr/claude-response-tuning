@@ -56,3 +56,15 @@ sequenceDiagram
 
 See [claude-response-tuning.md](claude-response-tuning.md) for installation and
 verification details.
+
+## Configuration reference panels
+
+These are sanitized, portable reference panels rather than live desktop
+captures. They show the exact configuration locations without exposing a
+personal API key or Claude conversation data.
+
+![Output style configuration](screenshots/output-style.svg)
+
+![Claude settings configuration](screenshots/settings-json.svg)
+
+![Per-user file layout](screenshots/file-layout.svg)
