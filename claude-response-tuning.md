@@ -152,13 +152,18 @@ processing.
 2. Resolve `CLAUDE_REWRITE_OPENAI_KEY` from the process environment or a
    literal assignment in the current user's `~/.zshrc`.
 3. POST one request to `https://api.openai.com/v1/responses`.
-4. Use `model: gpt-5.6-luna`, `reasoning.effort: low`, and `store: false`.
+4. Use `model: gpt-5.6-luna`, `reasoning.effort: low`, `text.verbosity: low`,
+   and `store: false`.
 5. Write only Luna's edited text to stdout.
 6. Make one Luna request per response; do not perform a second style-repair
    request.
-7. On missing key, network error, timeout, malformed API response, empty
-   output, or a failed protection check, write the original draft to stdout.
-8. Always exit 0. Write diagnostic reasons to stderr only.
+7. On missing key, network error, timeout, truncated or malformed API response,
+   empty output, or a failed protection check, write the original draft to
+   stdout.
+8. Exit 0 whenever a draft was read, whether it was rewritten or fell back.
+   Exit non-zero only when no draft could be read at all, since there is then
+   nothing to protect and a zero exit would report a success that did not
+   happen. Write diagnostic reasons to stderr only.
 
 The request payload should have this shape:
 
@@ -166,6 +171,7 @@ The request payload should have this shape:
 {
   "model": "gpt-5.6-luna",
   "reasoning": { "effort": "low" },
+  "text": { "verbosity": "low" },
   "store": false,
   "instructions": "Rewrite the draft into a concise, evidence-first Codex technical response. Preserve facts and protected technical literals, but rebuild prose, headings, ordering, and prioritization as needed. Lead with the outcome, use direct technical language, remove assistant self-reference, reader address, rhetorical framing, metaphors, and conversational calls to action. Output only the rewritten text.",
   "input": "<the complete draft>"
