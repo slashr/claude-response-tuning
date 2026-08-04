@@ -19,6 +19,7 @@ Environment:
                                 or an `export` line in ~/.zshrc
     CLAUDE_REWRITE_MODEL        default gpt-5.6-luna
     CLAUDE_REWRITE_EFFORT       default low  (the Luna-light setting)
+    CLAUDE_REWRITE_VERBOSITY    default low  (low | medium | high)
     CLAUDE_REWRITE_TIMEOUT      default 60   (seconds)
     CLAUDE_REWRITE_API_URL      default https://api.openai.com/v1/responses
     CLAUDE_REWRITE_MIN_RATIO    default 0.2  (truncation floor, rewrite/draft chars)
@@ -37,6 +38,7 @@ import urllib.request
 KEY_VAR = "CLAUDE_REWRITE_OPENAI_KEY"
 DEFAULT_MODEL = "gpt-5.6-luna"
 DEFAULT_EFFORT = "low"
+DEFAULT_VERBOSITY = "low"
 DEFAULT_TIMEOUT = 60.0
 DEFAULT_API_URL = "https://api.openai.com/v1/responses"
 DEFAULT_MIN_RATIO = 0.2
@@ -282,6 +284,11 @@ def call_luna(draft: str, key: str, instructions: str = INSTRUCTIONS):
             "effort": os.environ.get("CLAUDE_REWRITE_EFFORT") or DEFAULT_EFFORT
         },
         "store": False,
+        # Must stay nested; a top-level "verbosity" key is rejected outright.
+        "text": {
+            "verbosity": os.environ.get("CLAUDE_REWRITE_VERBOSITY")
+            or DEFAULT_VERBOSITY
+        },
         "instructions": instructions,
         "input": draft,
     }
@@ -306,8 +313,12 @@ def call_luna(draft: str, key: str, instructions: str = INSTRUCTIONS):
         return None, "network error: %s" % (exc.reason,)
     except (socket.timeout, TimeoutError):
         return None, "timed out after %gs" % timeout
-    except (OSError, ValueError) as exc:
-        return None, "request failed: %s" % (exc,)
+    except Exception as exc:
+        # Deliberately broad: http.client.IncompleteRead and its HTTPException
+        # siblings are neither OSError nor ValueError, so a narrower clause lets
+        # a mid-body truncation reach the module-level handler, which exits
+        # without emitting the draft. Returning a reason keeps the fallback.
+        return None, "request failed: %r" % (exc,)
 
     status = body.get("status")
     if status and status != "completed":
@@ -373,11 +384,12 @@ def main() -> None:
 
     if "--check" in args:
         key = resolve_key()
-        print("model:    %s" % (os.environ.get("CLAUDE_REWRITE_MODEL") or DEFAULT_MODEL))
-        print("effort:   %s" % (os.environ.get("CLAUDE_REWRITE_EFFORT") or DEFAULT_EFFORT))
-        print("endpoint: %s" % (os.environ.get("CLAUDE_REWRITE_API_URL") or DEFAULT_API_URL))
-        print("timeout:  %gs" % _float_env("CLAUDE_REWRITE_TIMEOUT", DEFAULT_TIMEOUT))
-        print("api key:  %s" % ("resolved" if key else "MISSING"))
+        print("model:     %s" % (os.environ.get("CLAUDE_REWRITE_MODEL") or DEFAULT_MODEL))
+        print("effort:    %s" % (os.environ.get("CLAUDE_REWRITE_EFFORT") or DEFAULT_EFFORT))
+        print("verbosity: %s" % (os.environ.get("CLAUDE_REWRITE_VERBOSITY") or DEFAULT_VERBOSITY))
+        print("endpoint:  %s" % (os.environ.get("CLAUDE_REWRITE_API_URL") or DEFAULT_API_URL))
+        print("timeout:   %gs" % _float_env("CLAUDE_REWRITE_TIMEOUT", DEFAULT_TIMEOUT))
+        print("api key:   %s" % ("resolved" if key else "MISSING"))
         sys.exit(0)
 
     if args and not args[0].startswith("-"):
