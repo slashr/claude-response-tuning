@@ -4,10 +4,15 @@
 Reads Claude's finished draft on stdin (or from a file argument) and writes the
 Luna-edited version to stdout.
 
-The contract is fail-safe: this script ALWAYS writes a usable answer to stdout
-and ALWAYS exits 0. Missing API key, timeout, HTTP error, empty output, an
-incomplete response, or a rewrite that dropped a protected literal all fall
-back to Claude's original draft, with the reason recorded on stderr.
+The contract is fail-safe: once the draft has been read, this script ALWAYS
+writes a usable answer to stdout and ALWAYS exits 0. Missing API key, timeout,
+HTTP error, truncated or malformed response, empty output, or a rewrite that
+dropped a protected literal all fall back to Claude's original draft, with the
+reason recorded on stderr.
+
+The single exception is a draft that could not be read at all (unreadable file
+argument or unreadable stdin). There is no text to protect in that case, so the
+script exits 2 rather than reporting success it did not achieve.
 
 Usage:
     response-rewrite < draft.md
@@ -109,11 +114,24 @@ Output only the rewritten text: no preamble, no commentary, and no surrounding
 code fence."""
 
 
+# Held at module scope so the last-resort handler can still emit the draft
+# after an exception unwinds main(). _EMITTED stops it writing a second copy on
+# top of a partial write.
+_DRAFT = ""
+_EMITTED = False
+
+
 def note(reason: str) -> None:
-    sys.stderr.write("response-rewrite: %s\n" % reason)
+    # Best-effort: a closed or broken stderr must never cost the response.
+    try:
+        sys.stderr.write("response-rewrite: %s\n" % reason)
+    except Exception:
+        pass
 
 
 def emit(text: str) -> None:
+    global _EMITTED
+    _EMITTED = True
     sys.stdout.write(text)
     if text and not text.endswith("\n"):
         sys.stdout.write("\n")
@@ -292,17 +310,19 @@ def call_luna(draft: str, key: str, instructions: str = INSTRUCTIONS):
         "instructions": instructions,
         "input": draft,
     }
-    request = urllib.request.Request(
-        os.environ.get("CLAUDE_REWRITE_API_URL") or DEFAULT_API_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": "Bearer %s" % key,
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
     timeout = _float_env("CLAUDE_REWRITE_TIMEOUT", DEFAULT_TIMEOUT)
     try:
+        # Built inside the guard: an unusable CLAUDE_REWRITE_API_URL or an
+        # unencodable payload must fall back like any other request failure.
+        request = urllib.request.Request(
+            os.environ.get("CLAUDE_REWRITE_API_URL") or DEFAULT_API_URL,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": "Bearer %s" % key,
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
@@ -320,10 +340,14 @@ def call_luna(draft: str, key: str, instructions: str = INSTRUCTIONS):
         # without emitting the draft. Returning a reason keeps the fallback.
         return None, "request failed: %r" % (exc,)
 
+    if not isinstance(body, dict):
+        return None, "unexpected response shape: %s" % type(body).__name__
+
     status = body.get("status")
     if status and status != "completed":
-        detail = (body.get("incomplete_details") or {}).get("reason") or status
-        return None, "response not completed (%s)" % detail
+        details = body.get("incomplete_details")
+        detail = details.get("reason") if isinstance(details, dict) else None
+        return None, "response not completed (%s)" % (detail or status)
 
     text = extract_text(body)
     if not text.strip():
@@ -343,16 +367,27 @@ def _http_detail(exc: urllib.error.HTTPError) -> str:
 
 
 def extract_text(body) -> str:
-    """Collect output_text parts from a Responses API payload."""
+    """Collect output_text parts from a Responses API payload.
+
+    Every level is shape-checked rather than trusted: a payload that does not
+    match the documented schema must yield "", which call_luna reports as empty
+    output, not an exception that escapes to the last-resort handler.
+    """
+    if not isinstance(body, dict):
+        return ""
     if isinstance(body.get("output_text"), str):
         return body["output_text"]
     parts = []
-    for item in body.get("output") or []:
+    output = body.get("output")
+    for item in output if isinstance(output, list) else []:
         if not isinstance(item, dict) or item.get("type") == "reasoning":
             continue
-        for part in item.get("content") or []:
+        content = item.get("content")
+        for part in content if isinstance(content, list) else []:
             if isinstance(part, dict) and part.get("type") == "output_text":
-                parts.append(part.get("text") or "")
+                text = part.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
     return "".join(parts)
 
 
@@ -392,15 +427,24 @@ def main() -> None:
         print("api key:   %s" % ("resolved" if key else "MISSING"))
         sys.exit(0)
 
+    # A draft that cannot be read is the one failure exit 0 must not cover: there
+    # is no text to protect, and a silent success would hide the lost input.
     if args and not args[0].startswith("-"):
         try:
             with open(args[0], "r", encoding="utf-8") as handle:
                 draft = handle.read()
-        except OSError as exc:
+        except (OSError, UnicodeError) as exc:
             note("cannot read draft file: %s" % exc)
-            sys.exit(0)
+            sys.exit(2)
     else:
-        draft = sys.stdin.read()
+        try:
+            draft = sys.stdin.read()
+        except (OSError, UnicodeError) as exc:
+            note("cannot read draft from stdin: %s" % exc)
+            sys.exit(2)
+
+    global _DRAFT
+    _DRAFT = draft
 
     if not draft.strip():
         note("empty draft, nothing to rewrite")
@@ -416,6 +460,10 @@ def main() -> None:
         fall_back(draft, reason)
 
     rewrite = unwrap_fence(draft, rewrite)
+    if not rewrite.strip():
+        # unwrap_fence can empty a result that was nothing but a fence, and on a
+        # short draft verify() passes on literals alone without noticing.
+        fall_back(draft, "rewrite is empty after unwrapping")
     reason = verify(draft, rewrite)
     if reason:
         fall_back(draft, reason)
@@ -431,4 +479,9 @@ if __name__ == "__main__":
         raise
     except BaseException as exc:  # never break the response
         note("unexpected error: %r" % (exc,))
+        if _DRAFT and not _EMITTED:
+            try:
+                emit(_DRAFT)
+            except Exception:
+                pass
         sys.exit(0)

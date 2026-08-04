@@ -160,7 +160,10 @@ processing.
 7. On missing key, network error, timeout, truncated or malformed API response,
    empty output, or a failed protection check, write the original draft to
    stdout.
-8. Always exit 0. Write diagnostic reasons to stderr only.
+8. Exit 0 whenever a draft was read, whether it was rewritten or fell back.
+   Exit non-zero only when no draft could be read at all, since there is then
+   nothing to protect and a zero exit would report a success that did not
+   happen. Write diagnostic reasons to stderr only.
 
 The request payload should have this shape:
 
