@@ -35,6 +35,21 @@ The Bash tool does not perform the rewrite. It starts the Python executable and
 connects Claude's temporary Markdown draft to the wrapper's stdin. The wrapper
 performs the local validation; Luna performs the language transformation.
 
+### Answer boundary
+
+The wrapper prefixes every non-empty final response—whether it is a successful
+Luna rewrite or a safe draft fallback—with a bright row of 20 yellow-square
+emojis and a blank line:
+
+```text
+🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨
+
+<answer>
+```
+
+This is a visual boundary in Claude's response body. It does not hide or alter
+the separate tool-call and reasoning transcript shown by the desktop UI.
+
 ### Mapping Codex's Pragmatic personalization
 
 Codex's `personality = "pragmatic"` setting is local to the Codex client. It
@@ -143,7 +158,8 @@ Once all tool calls and investigation for the turn are finished:
    ```
 
 4. Confirm that the command returned non-empty output.
-5. Emit that stdout byte-for-byte as the entire final response.
+5. Emit that stdout byte-for-byte as the entire final response. It already
+   contains the yellow-square marker before the answer.
 6. If it returns empty, publish the draft unchanged.
 
 Call the command once per turn. Do not re-run it to shop for phrasing.
@@ -186,12 +202,12 @@ processing.
 3. POST one request to `https://api.openai.com/v1/responses`.
 4. Use `model: gpt-5.6-luna`, `reasoning.effort: low`, `text.verbosity: low`,
    and `store: false`.
-5. Write only Luna's edited text to stdout.
+5. Write the yellow-square marker followed by Luna's edited text to stdout.
 6. Make one Luna request per response; do not perform a second style-repair
    request.
 7. On missing key, network error, timeout, truncated or malformed API response,
-   empty output, or a failed protection check, write the original draft to
-   stdout.
+   empty output, or a failed protection check, write the yellow-square marker
+   followed by the original draft to stdout.
 8. Exit 0 whenever a draft was read, whether it was rewritten or fell back.
    Exit non-zero only when no draft could be read at all, since there is then
    nothing to protect and a zero exit would report a success that did not
@@ -306,7 +322,8 @@ printf '%s\n' \
 Expected results:
 
 - stderr reports that it rewrote the draft;
-- stdout contains only the edited response;
+- stdout begins with the yellow-square marker and then contains only the edited
+  response;
 - no key appears anywhere in output.
 
 ## 6. Verify the real Claude path

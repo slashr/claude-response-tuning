@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 """response-rewrite -- route a completed Claude draft through OpenAI Luna.
 
-Reads Claude's finished draft on stdin (or from a file argument) and writes the
-Luna-edited version to stdout.
+Reads Claude's finished draft on stdin (or from a file argument) and writes a
+bright visual marker followed by the Luna-edited version to stdout.
 
 The contract is fail-safe: once the draft has been read, this script ALWAYS
 writes a usable answer to stdout and ALWAYS exits 0. Missing API key, timeout,
@@ -49,6 +49,7 @@ DEFAULT_API_URL = "https://api.openai.com/v1/responses"
 DEFAULT_MIN_RATIO = 0.2
 RATIO_FLOOR_MIN_DRAFT = 400
 MAX_LITERALS = 4000
+ANSWER_SEPARATOR = "🟨" * 20 + "\n\n"
 
 INSTRUCTIONS = """\
 You are a copy editor for a senior software engineer's terminal assistant.
@@ -164,6 +165,8 @@ def note(reason: str) -> None:
 def emit(text: str) -> None:
     global _EMITTED
     _EMITTED = True
+    if text:
+        sys.stdout.write(ANSWER_SEPARATOR)
     sys.stdout.write(text)
     if text and not text.endswith("\n"):
         sys.stdout.write("\n")
