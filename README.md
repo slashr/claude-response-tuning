@@ -35,9 +35,9 @@ draft, builds the JSON request, calls Luna once, validates protected literals,
 and returns either the rewrite or the original draft.
 
 For a clear boundary in Claude's transcript, stdout begins with a bright row of
-10 yellow-square emojis (`🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨`) and a blank line before either the
-rewritten response or the safe fallback draft. This marks the final answer body
-without changing the tool-call or reasoning transcript shown by the UI.
+20 yellow-square emojis and a blank line before either the rewritten response or
+the safe fallback draft. This marks the final answer body without changing the
+tool-call or reasoning transcript shown by the UI.
 
 The wrapper explicitly maps Codex's Pragmatic personalization into its Luna
 instructions: outcome-first writing, high information density, evidence before
