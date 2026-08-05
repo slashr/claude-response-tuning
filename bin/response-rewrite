@@ -1,14 +1,14 @@
 #!/usr/bin/python3
-"""response-rewrite -- route a completed Claude draft through OpenAI Luna.
+"""response-rewrite -- route a completed Claude draft through Bedrock Luna.
 
 Reads Claude's finished draft on stdin (or from a file argument) and writes the
 Luna-edited version to stdout.
 
 The contract is fail-safe: once the draft has been read, this script ALWAYS
-writes a usable answer to stdout and ALWAYS exits 0. Missing API key, timeout,
-HTTP error, truncated or malformed response, empty output, or a rewrite that
-dropped a protected literal all fall back to Claude's original draft, with the
-reason recorded on stderr.
+writes a usable answer to stdout and ALWAYS exits 0. Missing AWS credentials or
+dependencies, timeout, HTTP error, truncated or malformed response, empty
+output, or a rewrite that dropped a protected literal all fall back to Claude's
+original draft, with the reason recorded on stderr.
 
 The single exception is a draft that could not be read at all (unreadable file
 argument or unreadable stdin). There is no text to protect in that case, so the
@@ -20,32 +20,29 @@ Usage:
     response-rewrite --check        # print resolved config, make no API call
 
 Environment:
-    CLAUDE_REWRITE_OPENAI_KEY   required; also read from ~/.claude/response-rewrite.env
-                                or an `export` line in ~/.zshrc
-    CLAUDE_REWRITE_MODEL        default gpt-5.6-luna
+    CLAUDE_REWRITE_AWS_REGION   default us-east-1
+    CLAUDE_REWRITE_MODEL        default openai.gpt-5.6-luna
     CLAUDE_REWRITE_EFFORT       default low  (the Luna-light setting)
     CLAUDE_REWRITE_VERBOSITY    default low  (low | medium | high)
     CLAUDE_REWRITE_TIMEOUT      default 60   (seconds)
-    CLAUDE_REWRITE_API_URL      default https://api.openai.com/v1/responses
     CLAUDE_REWRITE_MIN_RATIO    default 0.2  (truncation floor, rewrite/draft chars)
+
+The wrapper requires `openai>=2.45.0` and `aws-bedrock-token-generator`. It
+uses the ambient AWS SDK credential chain and the Bedrock `bedrock-mantle`
+OpenAI-compatible Responses API; it never reads or stores an OpenAI API key.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import re
-import socket
 import sys
-import urllib.error
-import urllib.request
 
-KEY_VAR = "CLAUDE_REWRITE_OPENAI_KEY"
-DEFAULT_MODEL = "gpt-5.6-luna"
+DEFAULT_MODEL = "openai.gpt-5.6-luna"
+DEFAULT_REGION = "us-east-1"
 DEFAULT_EFFORT = "low"
 DEFAULT_VERBOSITY = "low"
 DEFAULT_TIMEOUT = 60.0
-DEFAULT_API_URL = "https://api.openai.com/v1/responses"
 DEFAULT_MIN_RATIO = 0.2
 RATIO_FLOOR_MIN_DRAFT = 400
 MAX_LITERALS = 4000
@@ -142,45 +139,6 @@ def fall_back(draft: str, reason: str) -> None:
     note("falling back to draft (%s)" % reason)
     emit(draft)
     sys.exit(0)
-
-
-# --------------------------------------------------------------------------
-# Key resolution. The key value is never logged, echoed, or written anywhere.
-# --------------------------------------------------------------------------
-
-def resolve_key() -> str:
-    key = (os.environ.get(KEY_VAR) or "").strip()
-    if key:
-        return key
-
-    env_file = os.path.expanduser("~/.claude/response-rewrite.env")
-    key = _key_from_file(env_file, r"^\s*(?:export\s+)?%s\s*=\s*(.+?)\s*$")
-    if key:
-        return key
-
-    # Claude Code tool shells do not always inherit an interactive profile, so
-    # fall back to the canonical `export` line in the user's own shell config.
-    return _key_from_file(
-        os.path.expanduser("~/.zshrc"),
-        r"^\s*export\s+%s\s*=\s*(.+?)\s*$",
-    )
-
-
-def _key_from_file(path: str, pattern_template: str) -> str:
-    try:
-        with open(path, "r", encoding="utf-8", errors="replace") as handle:
-            contents = handle.read()
-    except OSError:
-        return ""
-    match = re.search(
-        pattern_template % re.escape(KEY_VAR), contents, re.MULTILINE
-    )
-    if not match:
-        return ""
-    value = match.group(1).strip()
-    if value[:1] in ("'", '"') and value[-1:] == value[:1] and len(value) > 1:
-        value = value[1:-1]
-    return value.strip()
 
 
 # --------------------------------------------------------------------------
@@ -291,79 +249,65 @@ def _float_env(name: str, default: float) -> float:
 
 
 # --------------------------------------------------------------------------
-# Luna call
+# Bedrock Luna call
 # --------------------------------------------------------------------------
 
-def call_luna(draft: str, key: str, instructions: str = INSTRUCTIONS):
+def _region() -> str:
+    return (
+        os.environ.get("CLAUDE_REWRITE_AWS_REGION")
+        or os.environ.get("AWS_REGION")
+        or os.environ.get("AWS_DEFAULT_REGION")
+        or DEFAULT_REGION
+    ).strip()
+
+
+def _bedrock_client():
+    from aws_bedrock_token_generator import provide_token
+    from openai import BedrockOpenAI
+
+    region = _region()
+    return BedrockOpenAI(
+        aws_region=region,
+        bedrock_token_provider=lambda: provide_token(region=region),
+        timeout=_float_env("CLAUDE_REWRITE_TIMEOUT", DEFAULT_TIMEOUT),
+    )
+
+
+def call_luna(draft: str, instructions: str = INSTRUCTIONS):
     """Return (text, None) on success or (None, reason) on failure."""
-    payload = {
-        "model": os.environ.get("CLAUDE_REWRITE_MODEL") or DEFAULT_MODEL,
-        "reasoning": {
-            "effort": os.environ.get("CLAUDE_REWRITE_EFFORT") or DEFAULT_EFFORT
-        },
-        "store": False,
-        # Must stay nested; a top-level "verbosity" key is rejected outright.
-        "text": {
-            "verbosity": os.environ.get("CLAUDE_REWRITE_VERBOSITY")
-            or DEFAULT_VERBOSITY
-        },
-        "instructions": instructions,
-        "input": draft,
-    }
-    timeout = _float_env("CLAUDE_REWRITE_TIMEOUT", DEFAULT_TIMEOUT)
     try:
-        # Built inside the guard: an unusable CLAUDE_REWRITE_API_URL or an
-        # unencodable payload must fall back like any other request failure.
-        request = urllib.request.Request(
-            os.environ.get("CLAUDE_REWRITE_API_URL") or DEFAULT_API_URL,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": "Bearer %s" % key,
-                "Content-Type": "application/json",
+        response = _bedrock_client().responses.create(
+            model=os.environ.get("CLAUDE_REWRITE_MODEL") or DEFAULT_MODEL,
+            reasoning={
+                "effort": os.environ.get("CLAUDE_REWRITE_EFFORT") or DEFAULT_EFFORT
             },
-            method="POST",
+            text={
+                "verbosity": os.environ.get("CLAUDE_REWRITE_VERBOSITY")
+                or DEFAULT_VERBOSITY
+            },
+            store=False,
+            instructions=instructions,
+            input=draft,
         )
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        return None, "HTTP %s: %s" % (exc.code, _http_detail(exc))
-    except urllib.error.URLError as exc:
-        if isinstance(exc.reason, (socket.timeout, TimeoutError)):
-            return None, "timed out after %gs" % timeout
-        return None, "network error: %s" % (exc.reason,)
-    except (socket.timeout, TimeoutError):
-        return None, "timed out after %gs" % timeout
     except Exception as exc:
-        # Deliberately broad: http.client.IncompleteRead and its HTTPException
-        # siblings are neither OSError nor ValueError, so a narrower clause lets
-        # a mid-body truncation reach the module-level handler, which exits
-        # without emitting the draft. Returning a reason keeps the fallback.
-        return None, "request failed: %r" % (exc,)
+        return None, "request failed: %s" % type(exc).__name__
 
-    if not isinstance(body, dict):
-        return None, "unexpected response shape: %s" % type(body).__name__
+    body = response.model_dump() if hasattr(response, "model_dump") else response
+    status = getattr(response, "status", None)
+    if isinstance(body, dict):
+        status = body.get("status", status)
 
-    status = body.get("status")
     if status and status != "completed":
-        details = body.get("incomplete_details")
+        details = body.get("incomplete_details") if isinstance(body, dict) else None
         detail = details.get("reason") if isinstance(details, dict) else None
         return None, "response not completed (%s)" % (detail or status)
 
-    text = extract_text(body)
+    text = getattr(response, "output_text", None)
+    if not isinstance(text, str):
+        text = extract_text(body)
     if not text.strip():
         return None, "empty model output"
     return text, None
-
-
-def _http_detail(exc: urllib.error.HTTPError) -> str:
-    try:
-        body = json.loads(exc.read().decode("utf-8"))
-        message = (body.get("error") or {}).get("message")
-        if message:
-            return str(message)[:300]
-    except Exception:
-        pass
-    return exc.reason or "no detail"
 
 
 def extract_text(body) -> str:
@@ -418,13 +362,20 @@ def main() -> None:
     args = [a for a in sys.argv[1:] if a]
 
     if "--check" in args:
-        key = resolve_key()
         print("model:     %s" % (os.environ.get("CLAUDE_REWRITE_MODEL") or DEFAULT_MODEL))
+        print("region:    %s" % _region())
         print("effort:    %s" % (os.environ.get("CLAUDE_REWRITE_EFFORT") or DEFAULT_EFFORT))
         print("verbosity: %s" % (os.environ.get("CLAUDE_REWRITE_VERBOSITY") or DEFAULT_VERBOSITY))
-        print("endpoint:  %s" % (os.environ.get("CLAUDE_REWRITE_API_URL") or DEFAULT_API_URL))
+        print("endpoint:  https://bedrock-mantle.%s.api.aws/openai/v1/responses" % _region())
         print("timeout:   %gs" % _float_env("CLAUDE_REWRITE_TIMEOUT", DEFAULT_TIMEOUT))
-        print("api key:   %s" % ("resolved" if key else "MISSING"))
+        try:
+            import aws_bedrock_token_generator  # noqa: F401
+            import openai  # noqa: F401
+        except ImportError:
+            print("dependencies: MISSING")
+        else:
+            print("dependencies: available")
+        print("auth:      AWS SDK credential chain")
         sys.exit(0)
 
     # A draft that cannot be read is the one failure exit 0 must not cover: there
@@ -451,11 +402,7 @@ def main() -> None:
         emit(draft)
         sys.exit(0)
 
-    key = resolve_key()
-    if not key:
-        fall_back(draft, "%s not set" % KEY_VAR)
-
-    rewrite, reason = call_luna(draft, key)
+    rewrite, reason = call_luna(draft)
     if reason:
         fall_back(draft, reason)
 
