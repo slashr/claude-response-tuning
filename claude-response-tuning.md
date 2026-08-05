@@ -38,11 +38,11 @@ performs the local validation; Luna performs the language transformation.
 ### Answer boundary
 
 The wrapper prefixes every non-empty final response—whether it is a successful
-Luna rewrite or a safe draft fallback—with a bright row of 10 yellow-square
+Luna rewrite or a safe draft fallback—with a bright row of 20 yellow-square
 emojis and a blank line:
 
 ```text
-🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨
+🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨
 
 <answer>
 ```

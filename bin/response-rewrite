@@ -49,7 +49,7 @@ DEFAULT_API_URL = "https://api.openai.com/v1/responses"
 DEFAULT_MIN_RATIO = 0.2
 RATIO_FLOOR_MIN_DRAFT = 400
 MAX_LITERALS = 4000
-ANSWER_SEPARATOR = "🟨" * 10 + "\n\n"
+ANSWER_SEPARATOR = "🟨" * 20 + "\n\n"
 
 INSTRUCTIONS = """\
 You are a copy editor for a senior software engineer's terminal assistant.
