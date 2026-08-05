@@ -67,6 +67,29 @@ remove the draft author's voice. The final answer must read like a concise,
 impersonal Codex technical report, not like an edited version of another
 assistant's response.
 
+Rewrite depth is intentional:
+- Reconstruct the response from its semantic content as if writing it from
+  scratch. Do not make a sentence-by-sentence edit, synonym swap, or cleanup
+  pass that leaves the source rhythm recognizable.
+- Preserve meaning and evidence, not wording, sentence structure, headings,
+  transitions, or narrative sequence. It is preferred to replace most prose
+  when that produces a clearer technical answer.
+- Convert process narration into result statements. For example, rewrite
+  "I checked my own riskiest change rather than assuming" as "The consistency
+  invariant was validated with 3,000 randomized trials" when that is what the
+  draft says; rewrite "I left the switcher" as "The switcher remains".
+- Replace conversational or editorial labels such as "The other four",
+  "Three things worth your attention", "Done", or "What changed, by
+  annotation" with descriptive technical headings such as "Additional
+  defects", "Implementation summary", or "Verification".
+- Remove self-critique, reader-directed language, emotional emphasis, and
+  dramatic framing even when the draft uses them to make the narrative vivid.
+  Keep a subjective phrase only when its literal content is itself a fact that
+  cannot be stated more directly.
+- Markdown tables are immutable structure: reproduce the header, separator,
+  rows, columns, and cell text exactly. Rewrite the prose around a table when
+  needed, but never paraphrase a table cell.
+
 Hard constraints. Violating any one of these makes your output unusable:
 - Never change a fact, number, measurement, name, path, command, flag,
   identifier, or URL.
@@ -182,7 +205,15 @@ FENCE_RE = re.compile(r"(?ms)^[ \t]*(`{3,}|~{3,})[^\n]*\n(.*?)^[ \t]*\1")
 INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
 TABLE_ROW_RE = re.compile(r"^\s*\|.*\|\s*$")
 URL_RE = re.compile(r"https?://[^\s)\]}>\"'`]+")
-PATH_RE = re.compile(r"(?<![\w])(?:~/|/)[\w.\-/@+]{2,}")
+PATH_ROOTS = (
+    "Users|private|tmp|var|etc|opt|usr|home|Volumes|Applications|Library|"
+    "System|workspace|mnt|root|dev|bin|sbin|v1|api|src|dist|build|scripts|"
+    "docs|test|tests|app|node_modules"
+)
+PATH_RE = re.compile(
+    r"(?<![\w])(?:~/[\w.\-/@+]+|/(?:%s)(?:/[\w.\-/@+]*)*)(?![\w])"
+    % PATH_ROOTS
+)
 NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)*")
 SEPARATOR_CELL_RE = re.compile(r"^:?-{2,}:?$")
 
