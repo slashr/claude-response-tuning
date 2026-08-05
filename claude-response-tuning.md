@@ -60,6 +60,13 @@ The Luna wrapper's explicit instructions remain the source of truth for this
 Claude-to-Luna path, so the behavior is reproducible for other users even when
 their Codex client has a different personalization setting.
 
+The prompt also requires a deep rewrite rather than sentence-level polishing.
+Luna is told to reconstruct the answer from its facts, replace the source
+headings and narrative sequence when useful, convert process narration into
+result statements, and remove reader-directed or self-critical language. This
+is what prevents phrases such as “Three things worth your attention” or “I
+checked my own riskiest change” from surviving as stylistic artifacts.
+
 ## What this does and does not do
 
 It does:
@@ -198,7 +205,7 @@ The request payload should have this shape:
   "reasoning": { "effort": "low" },
   "text": { "verbosity": "low" },
   "store": false,
-  "instructions": "Rewrite the draft into a concise, evidence-first Codex technical response using the Pragmatic preference: lead with the concrete outcome, maximize useful information density, separate verified evidence from inference, state practical tradeoffs when relevant, and omit ceremony or clever framing. Preserve facts and protected technical literals, but rebuild prose, headings, ordering, and prioritization as needed. Use direct technical language, remove assistant self-reference, reader address, rhetorical framing, metaphors, and conversational calls to action. Output only the rewritten text.",
+  "instructions": "Rewrite the draft from scratch into a concise, evidence-first Codex technical response using the Pragmatic preference. Preserve facts and protected technical literals, but do not preserve wording, sentence structure, headings, transitions, rhythm, or narrative sequence. Reconstruct the response from its semantic content; convert process narration into result statements; replace conversational labels with descriptive technical headings; remove assistant self-reference, reader address, self-critique, rhetorical framing, metaphors, emotional emphasis, and conversational calls to action. Lead with the concrete outcome, maximize useful information density, distinguish verified evidence from inference, state practical tradeoffs when relevant, and omit ceremony or clever framing. Output only the rewritten text.",
   "input": "<the complete draft>"
 }
 ```
