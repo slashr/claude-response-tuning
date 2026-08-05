@@ -34,6 +34,14 @@ The Bash tool is only the launcher and transport layer. The wrapper reads the
 draft, builds the JSON request, calls Luna once, validates protected literals,
 and returns either the rewrite or the original draft.
 
+The wrapper explicitly maps Codex's Pragmatic personalization into its Luna
+instructions: outcome-first writing, high information density, evidence before
+inference, practical tradeoffs, and no ceremony or rhetorical framing. It asks
+Luna to reconstruct the response from its facts rather than perform a
+sentence-level polish, and sets Responses API `text.verbosity` to `low` by
+default. The Codex client settings themselves are not inherited by a separate
+API request.
+
 ## Request boundary
 
 ```mermaid
