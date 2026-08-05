@@ -12,11 +12,11 @@
   <text x="36" y="320" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">7</text><text x="70" y="320" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">  },</text>
   <text x="36" y="356" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">8</text><text x="70" y="356" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">  "sandbox": {</text>
   <text x="36" y="392" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">9</text><text x="70" y="392" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">    "network": {</text>
-  <text x="36" y="428" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">10</text><text x="70" y="428" fill="#a7f3d0" font-family="SFMono-Regular,Menlo,monospace" font-size="20">      "allowedDomains": ["api.openai.com"]</text>
+  <text x="36" y="428" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">10</text><text x="70" y="428" fill="#a7f3d0" font-family="SFMono-Regular,Menlo,monospace" font-size="20">      "allowedDomains": ["bedrock-mantle.us-east-1.api.aws"]</text>
   <text x="36" y="464" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">11</text><text x="70" y="464" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">    }</text>
   <text x="36" y="500" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">12</text><text x="70" y="500" fill="#f9a8d4" font-family="SFMono-Regular,Menlo,monospace" font-size="20">  }</text>
   <text x="36" y="536" fill="#93c5fd" font-family="SFMono-Regular,Menlo,monospace" font-size="20">13</text><text x="70" y="536" fill="#f9fafb" font-family="SFMono-Regular,Menlo,monospace" font-size="20">}</text>
   <rect x="36" y="575" width="1128" height="80" rx="10" fill="#172554" stroke="#3b82f6"/>
-  <text x="60" y="610" fill="#dbeafe" font-family="SFMono-Regular,Menlo,monospace" font-size="18">Only the wrapper command and api.openai.com need access.</text>
-  <text x="60" y="638" fill="#dbeafe" font-family="SFMono-Regular,Menlo,monospace" font-size="18">The API key is configured separately and is not shown here.</text>
+  <text x="60" y="610" fill="#dbeafe" font-family="SFMono-Regular,Menlo,monospace" font-size="18">Only the wrapper command and Bedrock endpoint need access.</text>
+  <text x="60" y="638" fill="#dbeafe" font-family="SFMono-Regular,Menlo,monospace" font-size="18">AWS credentials stay in the normal local credential chain.</text>
 </svg>

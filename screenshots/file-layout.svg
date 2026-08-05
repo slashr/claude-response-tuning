@@ -10,8 +10,8 @@
   <text x="570" y="292" fill="#cbd5e1" font-family="SFMono-Regular,Menlo,monospace" font-size="18">Claude final-output contract</text>
   <text x="126" y="338" fill="#a7f3d0" font-family="SFMono-Regular,Menlo,monospace" font-size="21">settings.json</text>
   <text x="570" y="338" fill="#cbd5e1" font-family="SFMono-Regular,Menlo,monospace" font-size="18">output style, Bash permission, network allowlist</text>
-  <text x="126" y="384" fill="#fbbf24" font-family="SFMono-Regular,Menlo,monospace" font-size="21">response-rewrite.env</text>
-  <text x="570" y="384" fill="#fde68a" font-family="SFMono-Regular,Menlo,monospace" font-size="18">private API key; never commit</text>
+  <text x="126" y="384" fill="#a7f3d0" font-family="SFMono-Regular,Menlo,monospace" font-size="21">AWS SSO credentials</text>
+  <text x="570" y="384" fill="#cbd5e1" font-family="SFMono-Regular,Menlo,monospace" font-size="18">ambient AWS SDK credential chain</text>
   <path d="M126 430 H1060" stroke="#475569" stroke-width="2" stroke-dasharray="8 8"/>
-  <text x="126" y="475" fill="#94a3b8" font-family="SFMono-Regular,Menlo,monospace" font-size="18">No shared key. No shared conversation data. No repository secrets.</text>
+  <text x="126" y="475" fill="#94a3b8" font-family="SFMono-Regular,Menlo,monospace" font-size="18">No shared credentials. No shared conversation data. No repository secrets.</text>
 </svg>

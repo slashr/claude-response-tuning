@@ -1,8 +1,9 @@
-# Claude Code Desktop response tuning with OpenAI Luna
+# Claude Code Desktop response tuning with Bedrock Luna
 
-This guide makes Claude Code Desktop use OpenAI Luna as the final editor for
-each completed response. Claude still performs the investigation, tool use,
-and reasoning. Luna receives the completed draft once and rewrites it.
+This guide makes Claude Code Desktop use Luna through Amazon Bedrock as the
+final editor for each completed response. Claude still performs the
+investigation, tool use, and reasoning. Luna receives the completed draft once
+and rewrites it.
 
 ```text
 Claude tools and reasoning → complete draft → Bash launcher → Python wrapper → Luna → final response
@@ -19,9 +20,9 @@ flowchart TD
     A[Claude completes tool-backed investigation] --> B[Claude drafts final response]
     B --> C[Claude Bash tool launches response-rewrite]
     C --> D[Python wrapper reads stdin or draft file]
-    D --> E[Resolve key and collect protected literals]
+    D --> E[Resolve AWS credentials and collect protected literals]
     E --> F[Build JSON request]
-    F --> G[One POST to gpt-5.6-luna]
+    F --> G[One POST to Bedrock Luna]
     G --> H[Extract rewritten text]
     H --> I[Unwrap accidental outer fence]
     I --> J{Integrity checks pass?}
@@ -53,30 +54,22 @@ It does not:
 ## Prerequisites
 
 - Claude Code Desktop installed and signed in.
-- An OpenAI API key with access to `gpt-5.6-luna`.
+- An AWS SSO/profile or another AWS SDK credential source with permission to
+  call `bedrock-mantle:CreateInference` and `bedrock-mantle:CallWithBearerToken`.
+- The AWS-managed `AmazonBedrockMantleInferenceAccess` policy is the documented
+  starting point for these permissions.
 - Python 3 available at `/usr/bin/python3` in the environment where Claude
   runs Bash.
-- A conscious decision that final drafts may be sent to the OpenAI API. Use
-  appropriate OpenAI project data controls for sensitive work.
+- The Python packages `openai>=2.45.0` and
+  `aws-bedrock-token-generator` available to that interpreter.
+- A conscious decision that final drafts may be sent to Amazon Bedrock. Select
+  the AWS region and data controls appropriate for the workload.
 
 The examples use `~/.claude`; run them as the same macOS user who launches
 Claude Desktop. Configuring `/Users/alice/.claude` does not affect a Claude app
 launched by `/Users/bob`.
 
-## 1. Store the key privately
-
-Keep the key in that user's private shell configuration, not in a repository,
-shared guide, output style, or Claude settings file:
-
-```bash
-export CLAUDE_REWRITE_OPENAI_KEY='...'
-```
-
-Claude Desktop is launched by macOS, so it usually does not inherit an
-interactive shell. The wrapper below reads only that literal assignment; it
-does not source `~/.zshrc`.
-
-## 2. Install the strict output style
+## 1. Install the strict output style
 
 Create `~/.claude/output-styles/response-rewrite.md` with this content:
 
@@ -141,7 +134,7 @@ Reference panel (sanitized):
 
 ![The Response rewrite output style](screenshots/output-style.svg)
 
-## 3. Install a fail-safe Luna wrapper
+## 2. Install a fail-safe Luna wrapper
 
 Create `~/.claude/bin/response-rewrite`, make it executable, and use a Python 3
 executable with this contract. Claude's Bash tool only launches the process and
@@ -149,27 +142,29 @@ connects the temporary draft file (or stdin) to it; the wrapper performs the
 processing.
 
 1. Read the complete draft from stdin (or one file argument).
-2. Resolve `CLAUDE_REWRITE_OPENAI_KEY` from the process environment or a
-   literal assignment in the current user's `~/.zshrc`.
-3. POST one request to `https://api.openai.com/v1/responses`.
-4. Use `model: gpt-5.6-luna`, `reasoning.effort: low`, `text.verbosity: low`,
-   and `store: false`.
+2. Resolve the region from `CLAUDE_REWRITE_AWS_REGION`, `AWS_REGION`,
+   `AWS_DEFAULT_REGION`, or `us-east-1`.
+3. Use the AWS SDK credential chain to obtain a short-lived Bedrock bearer
+   token and POST one request to
+   `https://bedrock-mantle.{region}.api.aws/openai/v1/responses`.
+4. Use model `openai.gpt-5.6-luna`, `reasoning.effort: low`,
+   `text.verbosity: low`, and `store: false`.
 5. Write only Luna's edited text to stdout.
 6. Make one Luna request per response; do not perform a second style-repair
    request.
-7. On missing key, network error, timeout, truncated or malformed API response,
-   empty output, or a failed protection check, write the original draft to
-   stdout.
+7. On missing AWS credentials or dependencies, network error, timeout,
+   truncated or malformed response, empty output, or a failed protection
+   check, write the original draft to stdout.
 8. Exit 0 whenever a draft was read, whether it was rewritten or fell back.
    Exit non-zero only when no draft could be read at all, since there is then
    nothing to protect and a zero exit would report a success that did not
    happen. Write diagnostic reasons to stderr only.
 
-The request payload should have this shape:
+The SDK request should contain these fields:
 
 ```json
 {
-  "model": "gpt-5.6-luna",
+  "model": "openai.gpt-5.6-luna",
   "reasoning": { "effort": "low" },
   "text": { "verbosity": "low" },
   "store": false,
@@ -178,8 +173,8 @@ The request payload should have this shape:
 }
 ```
 
-Use a bounded timeout (30–60 seconds) and a draft-size limit. Never log the API
-key or put it in a request payload saved to the repository.
+Use a bounded timeout (30–60 seconds) and a draft-size limit. Never log AWS
+credentials, bearer tokens, request headers, or request bodies.
 
 ### Protect structure before publishing Luna output
 
@@ -202,12 +197,12 @@ sequenceDiagram
     participant C as Claude model
     participant S as Bash tool
     participant W as Python wrapper
-    participant L as Luna API
+    participant L as Bedrock Luna endpoint
     participant D as Claude Desktop
 
     C->>S: Create draft.md and invoke response-rewrite
     S->>W: Pass draft text through stdin
-    W->>W: Resolve key and collect literals
+    W->>W: Resolve AWS credentials and collect literals
     W->>L: Send one Responses API request
     L-->>W: Return rewritten text
     W->>W: Validate protected content
@@ -221,7 +216,7 @@ sequenceDiagram
     C->>D: Publish stdout byte-for-byte
 ```
 
-## 4. Configure Claude Desktop
+## 3. Configure Claude Desktop
 
 Merge these fields into `~/.claude/settings.json`:
 
@@ -236,16 +231,17 @@ Merge these fields into `~/.claude/settings.json`:
   },
   "sandbox": {
     "network": {
-      "allowedDomains": ["api.openai.com"]
+      "allowedDomains": ["bedrock-mantle.us-east-1.api.aws"]
     }
   }
 }
 ```
 
 Replace `YOUR_MACOS_USER` with the macOS account that actually runs Claude.
-`api.openai.com` must be allowed; otherwise the wrapper will fall back to the
-Claude draft. Start a **new Claude Code Desktop task** after changing settings
-or an output style.
+The selected `bedrock-mantle.{region}.api.aws` host must be allowed; otherwise
+the wrapper will fall back to the Claude draft. Update the allowlist if the
+region changes. Start a **new Claude Code Desktop task** after changing
+settings or an output style.
 
 Reference panel (sanitized):
 
@@ -255,7 +251,7 @@ The per-user locations are summarized here:
 
 ![The per-user Claude file layout](screenshots/file-layout.svg)
 
-## 5. Verify the wrapper directly
+## 4. Verify the wrapper directly
 
 First, verify configuration without sending anything to the API:
 
@@ -271,13 +267,18 @@ printf '%s\n' \
   | ~/.claude/bin/response-rewrite
 ```
 
-Expected results:
+Expected results when the AWS model subscription and permissions are active:
 
+- `--check` reports the Bedrock endpoint, AWS credential chain, and available
+  dependencies;
 - stderr reports that it rewrote the draft;
 - stdout contains only the edited response;
-- no key appears anywhere in output.
+- no credential or bearer token appears anywhere in output.
 
-## 6. Verify the real Claude path
+If Bedrock access is unavailable, stderr reports the failure and stdout is the
+original draft.
+
+## 5. Verify the real Claude path
 
 Open a fresh Claude Desktop task and ask for a small read-only tool-backed
 answer, for example:
@@ -342,8 +343,8 @@ model-based style judge.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| The response is untouched | The wrapper fell back. | Read stderr; check key resolution, API access, and timeout. |
-| `CONNECT tunnel failed` or HTTP 403 | Claude sandbox blocks OpenAI. | Allow `api.openai.com` in the Claude sandbox settings. |
+| The response is untouched | The wrapper fell back. | Read stderr; check AWS credentials, Bedrock permissions, model access, and timeout. |
+| `CONNECT tunnel failed` or HTTP 403 | Claude sandbox blocks Bedrock. | Allow the selected `bedrock-mantle.{region}.api.aws` host in the Claude sandbox settings. |
 | Luna output appears, then extra Claude text follows | Output style is weak. | Use the strict byte-for-byte output style above and start a new task. |
 | The wrong config is used | Claude runs under another macOS user. | Install files under the running account's home directory. |
 | Commands or tables changed | Protection is too weak. | Add literal and Markdown-structure validation; fall back on mismatch. |
@@ -351,11 +352,12 @@ model-based style judge.
 
 ## Security checklist
 
-- Keep the key only in private per-user configuration.
-- Do not source a whole shell profile from the wrapper.
+- Use the existing AWS SSO/profile or SDK credential chain; do not create a
+  per-user model API token for this wrapper.
 - Do not log request headers, request bodies, or environment variables.
 - Use `store: false`.
-- Permit only `api.openai.com` for this wrapper.
+- Permit only the selected `bedrock-mantle.{region}.api.aws` host for this
+  wrapper.
 - Treat drafts as potentially sensitive before enabling the feature broadly.
 - Keep fallback behavior deterministic: original draft to stdout, reason to
   stderr, exit code 0.

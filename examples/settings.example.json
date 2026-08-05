@@ -7,7 +7,7 @@
   },
   "sandbox": {
     "network": {
-      "allowedDomains": ["api.openai.com"]
+      "allowedDomains": ["bedrock-mantle.us-east-1.api.aws"]
     }
   }
 }
