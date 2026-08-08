@@ -19,7 +19,7 @@ flowchart TD
     A[Claude completes tool-backed investigation] --> B[Claude drafts final response]
     B --> C[Claude Bash tool launches response-rewrite]
     C --> D[Python wrapper reads stdin or draft file]
-    D --> E[Resolve key and collect protected literals]
+    D --> E[Resolve key, prompt file, and protected literals]
     E --> F[Build JSON request]
     F --> G[One POST to gpt-5.6-luna]
     G --> H[Extract rewritten text]
@@ -34,6 +34,21 @@ flowchart TD
 The Bash tool does not perform the rewrite. It starts the Python executable and
 connects Claude's temporary Markdown draft to the wrapper's stdin. The wrapper
 performs the local validation; Luna performs the language transformation.
+
+### Answer boundary
+
+The wrapper prefixes every non-empty final response—whether it is a successful
+Luna rewrite or a safe draft fallback—with a bright row of 20 yellow-square
+emojis and a blank line:
+
+```text
+🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨
+
+<answer>
+```
+
+This is a visual boundary in Claude's response body. It does not hide or alter
+the separate tool-call and reasoning transcript shown by the desktop UI.
 
 ### Mapping Codex's Pragmatic personalization
 
@@ -66,6 +81,14 @@ headings and narrative sequence when useful, convert process narration into
 result statements, and remove reader-directed or self-critical language. This
 is what prevents phrases such as “Three things worth your attention” or “I
 checked my own riskiest change” from surviving as stylistic artifacts.
+
+The audience policy is intentionally conservative: use plain language at about
+a 10th-grade reading level, lead with information needed for a high-level
+decision, and include low-level implementation detail only when it is needed to
+explain correctness, risk, verification, or a requested action. Material facts,
+evidence, limitations, recommendations, requested results, and protected
+technical literals still remain mandatory; the brevity preference applies only
+to explanatory prose.
 
 ## What this does and does not do
 
@@ -143,7 +166,8 @@ Once all tool calls and investigation for the turn are finished:
    ```
 
 4. Confirm that the command returned non-empty output.
-5. Emit that stdout byte-for-byte as the entire final response.
+5. Emit that stdout byte-for-byte as the entire final response. It already
+   contains the yellow-square marker before the answer.
 6. If it returns empty, publish the draft unchanged.
 
 Call the command once per turn. Do not re-run it to shop for phrasing.
@@ -180,18 +204,41 @@ executable with this contract. Claude's Bash tool only launches the process and
 connects the temporary draft file (or stdin) to it; the wrapper performs the
 processing.
 
+### Keep the editing prompt in its own file
+
+Store the editable Luna instructions separately from the wrapper:
+
+```text
+Repository source:  prompts/response-rewrite.md
+Installed default: ~/.claude/prompts/response-rewrite.md
+```
+
+The wrapper reads the prompt file on every invocation, so edits take effect on
+the next response without editing Python or restarting Claude Desktop. To test
+another prompt without replacing the installed file, set
+`CLAUDE_REWRITE_PROMPT=/absolute/path/to/prompt.md` in the wrapper's environment.
+If the selected file is missing or empty, the wrapper sends the request without
+an `instructions` field and Luna uses its own default behavior. This is
+separate from the wrapper's safety fallback, which still returns the original
+draft when the API call or integrity checks fail.
+
+Run `~/.claude/bin/response-rewrite --check` to see whether the prompt resolved
+and which path is being used. The prompt contents are never printed or logged.
+
 1. Read the complete draft from stdin (or one file argument).
 2. Resolve `CLAUDE_REWRITE_OPENAI_KEY` from the process environment or a
    literal assignment in the current user's `~/.zshrc`.
 3. POST one request to `https://api.openai.com/v1/responses`.
-4. Use `model: gpt-5.6-luna`, `reasoning.effort: low`, `text.verbosity: low`,
-   and `store: false`.
-5. Write only Luna's edited text to stdout.
+4. Load the optional prompt file and, when it is non-empty, include it as the
+   request's `instructions`. Otherwise omit that field. Use
+   `model: gpt-5.6-luna`, `reasoning.effort: low`, `text.verbosity: low`, and
+   `store: false`.
+5. Write the yellow-square marker followed by Luna's edited text to stdout.
 6. Make one Luna request per response; do not perform a second style-repair
    request.
 7. On missing key, network error, timeout, truncated or malformed API response,
-   empty output, or a failed protection check, write the original draft to
-   stdout.
+   empty output, or a failed protection check, write the yellow-square marker
+   followed by the original draft to stdout.
 8. Exit 0 whenever a draft was read, whether it was rewritten or fell back.
    Exit non-zero only when no draft could be read at all, since there is then
    nothing to protect and a zero exit would report a success that did not
@@ -205,7 +252,7 @@ The request payload should have this shape:
   "reasoning": { "effort": "low" },
   "text": { "verbosity": "low" },
   "store": false,
-  "instructions": "Rewrite the draft from scratch into a concise, evidence-first Codex technical response using the Pragmatic preference. Preserve facts and protected technical literals, but do not preserve wording, sentence structure, headings, transitions, rhythm, or narrative sequence. Reconstruct the response from its semantic content; convert process narration into result statements; replace conversational labels with descriptive technical headings; remove assistant self-reference, reader address, self-critique, rhetorical framing, metaphors, emotional emphasis, and conversational calls to action. Lead with the concrete outcome, maximize useful information density, distinguish verified evidence from inference, state practical tradeoffs when relevant, and omit ceremony or clever framing. Output only the rewritten text.",
+  "instructions": "<contents of prompts/response-rewrite.md, when the file is non-empty>",
   "input": "<the complete draft>"
 }
 ```
@@ -306,7 +353,11 @@ printf '%s\n' \
 Expected results:
 
 - stderr reports that it rewrote the draft;
-- stdout contains only the edited response;
+- stdout begins with the yellow-square marker and then contains only the edited
+  response;
+- `--check` reports `prompt: resolved` and the installed prompt path (or
+  `missing`/`empty` when Luna is intentionally being called without custom
+  instructions);
 - no key appears anywhere in output.
 
 ## 6. Verify the real Claude path

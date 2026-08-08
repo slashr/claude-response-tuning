@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 """response-rewrite -- route a completed Claude draft through OpenAI Luna.
 
-Reads Claude's finished draft on stdin (or from a file argument) and writes the
-Luna-edited version to stdout.
+Reads Claude's finished draft on stdin (or from a file argument) and writes a
+bright visual marker followed by the Luna-edited version to stdout.
 
 The contract is fail-safe: once the draft has been read, this script ALWAYS
 writes a usable answer to stdout and ALWAYS exits 0. Missing API key, timeout,
@@ -28,6 +28,8 @@ Environment:
     CLAUDE_REWRITE_TIMEOUT      default 60   (seconds)
     CLAUDE_REWRITE_API_URL      default https://api.openai.com/v1/responses
     CLAUDE_REWRITE_MIN_RATIO    default 0.2  (truncation floor, rewrite/draft chars)
+    CLAUDE_REWRITE_PROMPT       optional prompt file; defaults to
+                                ~/.claude/prompts/response-rewrite.md
 """
 
 from __future__ import annotations
@@ -41,6 +43,7 @@ import urllib.error
 import urllib.request
 
 KEY_VAR = "CLAUDE_REWRITE_OPENAI_KEY"
+PROMPT_VAR = "CLAUDE_REWRITE_PROMPT"
 DEFAULT_MODEL = "gpt-5.6-luna"
 DEFAULT_EFFORT = "low"
 DEFAULT_VERBOSITY = "low"
@@ -49,101 +52,8 @@ DEFAULT_API_URL = "https://api.openai.com/v1/responses"
 DEFAULT_MIN_RATIO = 0.2
 RATIO_FLOOR_MIN_DRAFT = 400
 MAX_LITERALS = 4000
-
-INSTRUCTIONS = """\
-You are a copy editor for a senior software engineer's terminal assistant.
-
-Rewrite the draft into a concise, evidence-first Codex technical response:
-tight sentences, plain direct language, active voice, no filler, no
-throat-clearing, and no restatement of the question.
-
-Apply the Pragmatic Codex preference throughout the rewrite:
-- lead with the concrete outcome, diagnosis, or action;
-- optimize for useful information density rather than conversational warmth;
-- separate verified evidence from inference and state practical tradeoffs when
-  they affect the decision;
-- use short paragraphs and purposeful lists only when they improve scanning;
-- omit ceremony, motivational language, clever framing, and explanations that
-  do not change what the reader should understand or do.
-
-You are the final writer, not a light proofreader. Preserve the source facts,
-but rebuild the prose, headings, ordering, and prioritization when needed to
-remove the draft author's voice. The final answer must read like a concise,
-impersonal Codex technical report, not like an edited version of another
-assistant's response.
-
-Rewrite depth is intentional:
-- Reconstruct the response from its semantic content as if writing it from
-  scratch. Do not make a sentence-by-sentence edit, synonym swap, or cleanup
-  pass that leaves the source rhythm recognizable.
-- Preserve meaning and evidence, not wording, sentence structure, headings,
-  transitions, or narrative sequence. It is preferred to replace most prose
-  when that produces a clearer technical answer.
-- Convert process narration into result statements. For example, rewrite
-  "I checked my own riskiest change rather than assuming" as "The consistency
-  invariant was validated with 3,000 randomized trials" when that is what the
-  draft says; rewrite "I left the switcher" as "The switcher remains".
-- Replace conversational or editorial labels such as "The other four",
-  "Three things worth your attention", "Done", or "What changed, by
-  annotation" with descriptive technical headings such as "Additional
-  defects", "Implementation summary", or "Verification".
-- Remove self-critique, reader-directed language, emotional emphasis, and
-  dramatic framing even when the draft uses them to make the narrative vivid.
-  Keep a subjective phrase only when its literal content is itself a fact that
-  cannot be stated more directly.
-- Markdown tables are immutable structure: reproduce the header, separator,
-  rows, columns, and cell text exactly. Rewrite the prose around a table when
-  needed, but never paraphrase a table cell.
-
-Hard constraints. Violating any one of these makes your output unusable:
-- Never change a fact, number, measurement, name, path, command, flag,
-  identifier, or URL.
-- Reproduce every fenced code block and inline code span byte for byte.
-- Preserve every Markdown table: same rows, same columns, same cell values.
-- Do not add information, caveats, hedges, apologies, praise, or next-step
-  suggestions that are not already in the draft.
-- Do not drop material information or summarize detail away. You may rewrite
-  prose, replace headings, reorder sections and lists, or consolidate repeated
-  framing when every fact and recommendation remains present.
-- Preserve Markdown tables, code blocks, inline code, links, paths, and
-  identifiers. Do not preserve the draft's wording, heading labels, list
-  labels, or narrative sequence merely because they appear in the source.
-- Treat the draft as source material, not a voice to preserve. Use a neutral,
-  concise, evidence-first Codex tone. Remove assistant personality, drama,
-  second-person framing, and rhetorical flourishes. For example, rewrite
-  "you've been observability-blind for ~8 hours" as "Observability has been
-  impaired for ~8 hours." Preserve the duration and all other facts.
-- Prefer direct technical statements over subjective characterizations. Avoid
-  language such as "fundamentally healthy", "blinding", "telling the truth",
-  "dead", "cosmetic", "worth noting", and "say the word" unless the terms
-  are essential facts from the draft.
-- Do not use first-person narration (for example, "I couldn't get", "I
-  retried", or "I can look") or address the reader (for example, "your
-  homelab", "tell me", or "if you want"). State the observation, evidence,
-  and next action directly instead.
-- Remove metaphors and conversational incident language. For example, rewrite
-  "ProtonVPN is blackholing your homelab" as "ProtonVPN blocks homelab
-  traffic", "the hosts are fine" as the specific reachability evidence, and
-  "this should come back to life" as the concrete expected result.
-- Before responding, silently scan every prose sentence for first- or
-  second-person language, assistant narration, hedging, metaphors, rhetorical
-  setup, or a conversational call to action. Rewrite it. Do not alter protected
-  literals to satisfy this rule.
-- Lead with the outcome or recommendation. Follow with the minimum evidence
-  required to support it, then clearly ranked alternatives or next actions.
-  Use descriptive technical headings, not editorial labels or a conversational
-  narrative.
-- Write in the style of a strong Codex answer: answer first, explain only what
-  supports the answer, use short paragraphs or purposeful bullets, and stop
-  when the requested result is complete. Do not imitate the draft's rhythm,
-  transitions, enthusiasm, or rhetorical devices.
-- Silently apply these transformations throughout the whole response, not only
-  to isolated phrases: remove assistant self-reference, reader address,
-  narrative throat-clearing, sales-like prioritization, dramatic incident
-  language, and conversational calls to action.
-
-Output only the rewritten text: no preamble, no commentary, and no surrounding
-code fence."""
+ANSWER_SEPARATOR = "🟨" * 20 + "\n\n"
+DEFAULT_PROMPT_RELATIVE = os.path.join("prompts", "response-rewrite.md")
 
 
 # Held at module scope so the last-resort handler can still emit the draft
@@ -164,6 +74,8 @@ def note(reason: str) -> None:
 def emit(text: str) -> None:
     global _EMITTED
     _EMITTED = True
+    if text:
+        sys.stdout.write(ANSWER_SEPARATOR)
     sys.stdout.write(text)
     if text and not text.endswith("\n"):
         sys.stdout.write("\n")
@@ -213,6 +125,31 @@ def _key_from_file(path: str, pattern_template: str) -> str:
     if value[:1] in ("'", '"') and value[-1:] == value[:1] and len(value) > 1:
         value = value[1:-1]
     return value.strip()
+
+
+# --------------------------------------------------------------------------
+# Prompt resolution. The prompt is intentionally optional: if the configured
+# file is missing or empty, the request omits `instructions` and Luna uses its
+# own default behavior. There is no embedded prompt fallback to maintain.
+# --------------------------------------------------------------------------
+
+def default_prompt_path() -> str:
+    return os.path.abspath(
+        os.path.join(os.path.dirname(__file__), os.pardir, DEFAULT_PROMPT_RELATIVE)
+    )
+
+
+def resolve_prompt():
+    configured = (os.environ.get(PROMPT_VAR) or "").strip()
+    path = os.path.expanduser(configured or default_prompt_path())
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            prompt = handle.read()
+    except (OSError, UnicodeError):
+        return None, path, "missing"
+    if not prompt.strip():
+        return None, path, "empty"
+    return prompt, path, "resolved"
 
 
 # --------------------------------------------------------------------------
@@ -334,7 +271,7 @@ def _float_env(name: str, default: float) -> float:
 # Luna call
 # --------------------------------------------------------------------------
 
-def call_luna(draft: str, key: str, instructions: str = INSTRUCTIONS):
+def call_luna(draft: str, key: str, instructions=None):
     """Return (text, None) on success or (None, reason) on failure."""
     payload = {
         "model": os.environ.get("CLAUDE_REWRITE_MODEL") or DEFAULT_MODEL,
@@ -348,9 +285,10 @@ def call_luna(draft: str, key: str, instructions: str = INSTRUCTIONS):
                 os.environ.get("CLAUDE_REWRITE_VERBOSITY") or DEFAULT_VERBOSITY
             )
         },
-        "instructions": instructions,
         "input": draft,
     }
+    if instructions:
+        payload["instructions"] = instructions
     timeout = _float_env("CLAUDE_REWRITE_TIMEOUT", DEFAULT_TIMEOUT)
     try:
         # Built inside the guard: an unusable CLAUDE_REWRITE_API_URL or an
@@ -460,12 +398,15 @@ def main() -> None:
 
     if "--check" in args:
         key = resolve_key()
+        _, prompt_path, prompt_status = resolve_prompt()
         print("model:     %s" % (os.environ.get("CLAUDE_REWRITE_MODEL") or DEFAULT_MODEL))
         print("effort:    %s" % (os.environ.get("CLAUDE_REWRITE_EFFORT") or DEFAULT_EFFORT))
         print("verbosity: %s" % (os.environ.get("CLAUDE_REWRITE_VERBOSITY") or DEFAULT_VERBOSITY))
         print("endpoint:  %s" % (os.environ.get("CLAUDE_REWRITE_API_URL") or DEFAULT_API_URL))
         print("timeout:   %gs" % _float_env("CLAUDE_REWRITE_TIMEOUT", DEFAULT_TIMEOUT))
         print("api key:   %s" % ("resolved" if key else "MISSING"))
+        print("prompt:    %s" % prompt_status)
+        print("prompt path: %s" % prompt_path)
         sys.exit(0)
 
     # A draft that cannot be read is the one failure exit 0 must not cover: there
@@ -496,7 +437,14 @@ def main() -> None:
     if not key:
         fall_back(draft, "%s not set" % KEY_VAR)
 
-    rewrite, reason = call_luna(draft, key)
+    instructions, prompt_path, prompt_status = resolve_prompt()
+    if prompt_status != "resolved":
+        note("prompt %s at %s; sending request without instructions" % (
+            prompt_status,
+            prompt_path,
+        ))
+
+    rewrite, reason = call_luna(draft, key, instructions)
     if reason:
         fall_back(draft, reason)
 
