@@ -82,6 +82,14 @@ result statements, and remove reader-directed or self-critical language. This
 is what prevents phrases such as “Three things worth your attention” or “I
 checked my own riskiest change” from surviving as stylistic artifacts.
 
+The audience policy is intentionally conservative: use plain language at about
+a 10th-grade reading level, lead with information needed for a high-level
+decision, and include low-level implementation detail only when it is needed to
+explain correctness, risk, verification, or a requested action. Material facts,
+evidence, limitations, recommendations, requested results, and protected
+technical literals still remain mandatory; the brevity preference applies only
+to explanatory prose.
+
 ## What this does and does not do
 
 It does:
@@ -221,7 +229,7 @@ The request payload should have this shape:
   "reasoning": { "effort": "low" },
   "text": { "verbosity": "low" },
   "store": false,
-  "instructions": "Rewrite the draft from scratch into a concise, evidence-first Codex technical response using the Pragmatic preference. Preserve facts and protected technical literals, but do not preserve wording, sentence structure, headings, transitions, rhythm, or narrative sequence. Reconstruct the response from its semantic content; convert process narration into result statements; replace conversational labels with descriptive technical headings; remove assistant self-reference, reader address, self-critique, rhetorical framing, metaphors, emotional emphasis, and conversational calls to action. Lead with the concrete outcome, maximize useful information density, distinguish verified evidence from inference, state practical tradeoffs when relevant, and omit ceremony or clever framing. Output only the rewritten text.",
+  "instructions": "Rewrite the draft from scratch into a concise, evidence-first Codex technical response. Use plain language suitable for roughly a 10th-grade reader and default to high-level decision support; include low-level implementation detail only when needed for correctness, risk, verification, or a requested action. Preserve every material fact, piece of evidence, limitation, recommendation, requested result, and protected technical literal, but do not preserve wording, sentence structure, headings, transitions, rhythm, or narrative sequence. Reconstruct the response from semantic content; convert process narration into result statements; replace conversational labels with descriptive technical headings; remove assistant self-reference, reader address, self-critique, rhetorical framing, metaphors, emotional emphasis, and conversational calls to action. Lead with the concrete outcome, maximize useful information density, distinguish verified evidence from inference, state practical tradeoffs when relevant, and omit ceremony or clever framing. Output only the rewritten text.",
   "input": "<the complete draft>"
 }
 ```
