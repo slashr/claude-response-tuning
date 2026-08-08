@@ -55,10 +55,6 @@ invocation. Set `CLAUDE_REWRITE_PROMPT=/absolute/path/to/prompt.md` to test a
 different prompt. If the file is missing or empty, the request omits
 `instructions` and Luna uses its own default behavior.
 
-Both the Claude output style and the Luna prompt require ASD-STE100
-Simplified Technical English (STE), so the constraint applies before and after
-the rewrite.
-
 ## Request boundary
 
 ```mermaid

@@ -90,10 +90,6 @@ evidence, limitations, recommendations, requested results, and protected
 technical literals still remain mandatory; the brevity preference applies only
 to explanatory prose.
 
-The output style and the external Luna prompt also require ASD-STE100
-Simplified Technical English (STE), so the language constraint applies both to
-Claude's draft and to the final rewritten response.
-
 ## What this does and does not do
 
 It does:
