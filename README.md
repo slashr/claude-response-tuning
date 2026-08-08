@@ -7,6 +7,8 @@ wrapper sends the completed draft to OpenAI Luna for a Codex-style rewrite.
 ## Contents
 
 - `bin/response-rewrite` — fail-safe Python 3 wrapper.
+- `prompts/response-rewrite.md` — editable Luna editing prompt, loaded at
+  runtime.
 - `output-styles/response-rewrite.md` — strict Claude output protocol.
 - `claude-response-tuning.md` — installation, configuration, verification, and
   troubleshooting guide.
@@ -46,6 +48,12 @@ Luna to reconstruct the response from its facts rather than perform a
 sentence-level polish, use plain language, and default to high-level decision
 support. It sets Responses API `text.verbosity` to `low` by default. The Codex
 client settings themselves are not inherited by a separate API request.
+
+The editing prompt is kept outside the Python wrapper so it can be changed
+without editing code. The wrapper reads `prompts/response-rewrite.md` on every
+invocation. Set `CLAUDE_REWRITE_PROMPT=/absolute/path/to/prompt.md` to test a
+different prompt. If the file is missing or empty, the request omits
+`instructions` and Luna uses its own default behavior.
 
 ## Request boundary
 

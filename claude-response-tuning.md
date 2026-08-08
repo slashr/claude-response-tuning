@@ -19,7 +19,7 @@ flowchart TD
     A[Claude completes tool-backed investigation] --> B[Claude drafts final response]
     B --> C[Claude Bash tool launches response-rewrite]
     C --> D[Python wrapper reads stdin or draft file]
-    D --> E[Resolve key and collect protected literals]
+    D --> E[Resolve key, prompt file, and protected literals]
     E --> F[Build JSON request]
     F --> G[One POST to gpt-5.6-luna]
     G --> H[Extract rewritten text]
@@ -204,12 +204,35 @@ executable with this contract. Claude's Bash tool only launches the process and
 connects the temporary draft file (or stdin) to it; the wrapper performs the
 processing.
 
+### Keep the editing prompt in its own file
+
+Store the editable Luna instructions separately from the wrapper:
+
+```text
+Repository source:  prompts/response-rewrite.md
+Installed default: ~/.claude/prompts/response-rewrite.md
+```
+
+The wrapper reads the prompt file on every invocation, so edits take effect on
+the next response without editing Python or restarting Claude Desktop. To test
+another prompt without replacing the installed file, set
+`CLAUDE_REWRITE_PROMPT=/absolute/path/to/prompt.md` in the wrapper's environment.
+If the selected file is missing or empty, the wrapper sends the request without
+an `instructions` field and Luna uses its own default behavior. This is
+separate from the wrapper's safety fallback, which still returns the original
+draft when the API call or integrity checks fail.
+
+Run `~/.claude/bin/response-rewrite --check` to see whether the prompt resolved
+and which path is being used. The prompt contents are never printed or logged.
+
 1. Read the complete draft from stdin (or one file argument).
 2. Resolve `CLAUDE_REWRITE_OPENAI_KEY` from the process environment or a
    literal assignment in the current user's `~/.zshrc`.
 3. POST one request to `https://api.openai.com/v1/responses`.
-4. Use `model: gpt-5.6-luna`, `reasoning.effort: low`, `text.verbosity: low`,
-   and `store: false`.
+4. Load the optional prompt file and, when it is non-empty, include it as the
+   request's `instructions`. Otherwise omit that field. Use
+   `model: gpt-5.6-luna`, `reasoning.effort: low`, `text.verbosity: low`, and
+   `store: false`.
 5. Write the yellow-square marker followed by Luna's edited text to stdout.
 6. Make one Luna request per response; do not perform a second style-repair
    request.
@@ -229,7 +252,7 @@ The request payload should have this shape:
   "reasoning": { "effort": "low" },
   "text": { "verbosity": "low" },
   "store": false,
-  "instructions": "Rewrite the draft from scratch into a concise, evidence-first Codex technical response. Use plain language suitable for roughly a 10th-grade reader and default to high-level decision support; include low-level implementation detail only when needed for correctness, risk, verification, or a requested action. Preserve every material fact, piece of evidence, limitation, recommendation, requested result, and protected technical literal, but do not preserve wording, sentence structure, headings, transitions, rhythm, or narrative sequence. Reconstruct the response from semantic content; convert process narration into result statements; replace conversational labels with descriptive technical headings; remove assistant self-reference, reader address, self-critique, rhetorical framing, metaphors, emotional emphasis, and conversational calls to action. Lead with the concrete outcome, maximize useful information density, distinguish verified evidence from inference, state practical tradeoffs when relevant, and omit ceremony or clever framing. Output only the rewritten text.",
+  "instructions": "<contents of prompts/response-rewrite.md, when the file is non-empty>",
   "input": "<the complete draft>"
 }
 ```
@@ -332,6 +355,9 @@ Expected results:
 - stderr reports that it rewrote the draft;
 - stdout begins with the yellow-square marker and then contains only the edited
   response;
+- `--check` reports `prompt: resolved` and the installed prompt path (or
+  `missing`/`empty` when Luna is intentionally being called without custom
+  instructions);
 - no key appears anywhere in output.
 
 ## 6. Verify the real Claude path
