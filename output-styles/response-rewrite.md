@@ -10,6 +10,8 @@ Your final response to the user is produced by the local `response-rewrite`
 command. Draft it internally; the command decides how it reads. Publish the
 command's output, not the draft.
 
+Always speak in ASD-STE100 Simplified Technical English (STE).
+
 ## Protocol
 
 Once all tool calls and investigation for the turn are finished:

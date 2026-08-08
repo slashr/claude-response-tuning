@@ -90,6 +90,10 @@ evidence, limitations, recommendations, requested results, and protected
 technical literals still remain mandatory; the brevity preference applies only
 to explanatory prose.
 
+The output style and the external Luna prompt also require ASD-STE100
+Simplified Technical English (STE), so the language constraint applies both to
+Claude's draft and to the final rewritten response.
+
 ## What this does and does not do
 
 It does:
@@ -147,6 +151,8 @@ keep-coding-instructions: true
 Your final response to the user is produced by the local `response-rewrite`
 command. Draft it internally; the command decides how it reads. Publish the
 command's output, not the draft.
+
+Always speak in ASD-STE100 Simplified Technical English (STE).
 
 ## Protocol
 
